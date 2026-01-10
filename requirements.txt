@@ -1,0 +1,23 @@
+# TikTok Downloader Requirements
+# Core functionality
+yt-dlp>=2024.1.0
+requests>=2.31.0
+
+# GUI
+customtkinter>=5.2.0
+pillow>=10.0.0
+
+# Audio conversion
+pydub>=0.25.1
+
+# Utilities
+python-dotenv>=1.0.0
+validators>=0.22.0
+pyperclip>=1.8.2
+
+# Optional: For better UI
+tkinterdnd2>=0.3.0
+
+# Development
+pytest>=7.4.0
+black>=23.0.0
