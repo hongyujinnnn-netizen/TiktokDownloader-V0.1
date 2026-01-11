@@ -39,7 +39,7 @@ class MainWindow:
         
         # Configure window
         self.root.title(APP_NAME)
-        self.root.geometry("700x600")
+        self.root.geometry("800x700")
         self.root.configure(bg=COLORS["background"])
         self.root.resizable(True, True)  # Allow resizing for fullscreen
         

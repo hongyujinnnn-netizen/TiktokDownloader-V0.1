@@ -115,6 +115,9 @@ class InlineStatus:
     def pack(self, **kwargs):
         self.label.pack(**kwargs)
     
+    def grid(self, **kwargs):
+        self.label.grid(**kwargs)
+    
     def show_success(self, message):
         """Show success message"""
         self.label.config(text=f"✅ {message}", fg=COLORS["success"])
