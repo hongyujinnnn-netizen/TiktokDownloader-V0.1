@@ -10,6 +10,7 @@ import os
 # Import configuration
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from config import APP_NAME, COLORS, set_theme
+from utils.translator import set_language
 
 # Import GUI
 from gui.main_window import MainWindow
@@ -27,10 +28,13 @@ def main():
         # Initialize configuration
         config = ConfigManager()
         
-        # Apply theme from settings
+        # Apply language and theme from settings
+        language = config.get_setting("language", "en")
+        set_language(language)
+
         theme = config.get_setting("theme", "light")
         set_theme(theme)
-        logger.info(f"Applied {theme} theme")
+        logger.info(f"Applied {theme} theme | language={language}")
         
         # Create main window
         root = tk.Tk()

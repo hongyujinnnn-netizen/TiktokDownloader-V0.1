@@ -108,6 +108,5 @@ YTDLP_OPTIONS = {
 LANGUAGES = {
     "en": "English",
     "id": "Bahasa Indonesia",
-    "es": "Español",
-    "fr": "Français",
+    "km": "ភាសាខ្មែរ",
 }

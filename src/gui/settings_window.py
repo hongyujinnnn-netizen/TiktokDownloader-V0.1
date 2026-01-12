@@ -256,9 +256,9 @@ class SettingsWindow:
     def __init__(self, parent):
         self.window = tk.Toplevel(parent)
         self.window.title("Settings")
-        self.window.geometry("640x680")
+        self.window.geometry("900x600")
         self.window.configure(bg=COLORS["background"])
-        self.window.minsize(620, 560)
+        self.window.minsize(820, 560)
 
         self.window.transient(parent)
         self.window.grab_set()
@@ -275,6 +275,7 @@ class SettingsWindow:
         self.toggle_switches = []
         self.radio_groups = []
         self.update_thread = None
+        self._mousewheel_bound = False
 
         self.create_widgets()
         self.load_settings()
@@ -283,6 +284,7 @@ class SettingsWindow:
         self.window.protocol("WM_DELETE_WINDOW", self.cancel_changes)
         self.window.bind("<Escape>", lambda _e: self.cancel_changes())
         self.window.bind("<Control-s>", lambda _e: self.save_settings())
+        self.window.bind("<Destroy>", self._on_window_destroy)
 
         self.window.update_idletasks()
 
@@ -369,10 +371,8 @@ class SettingsWindow:
         self.canvas.pack(side="left", fill="both", expand=True)
         self.scrollbar.pack(side="right", fill="y")
 
-        def _on_mousewheel(event):
-            self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-
-        self.canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)
+        self._mousewheel_bound = True
 
         header = tk.Frame(self.scrollable_frame, bg=COLORS["background"])
         self.register_themable(header, bg="background")
@@ -501,6 +501,29 @@ class SettingsWindow:
         cancel_button.grid(row=0, column=2, sticky="e")
 
         self.update_save_state()
+
+    def _on_mousewheel(self, event):
+        if not getattr(self, "canvas", None):
+            return
+        if not self.canvas.winfo_exists():
+            return
+        self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+    def _unbind_mousewheel(self):
+        if not getattr(self, "canvas", None):
+            return
+        if not self._mousewheel_bound:
+            return
+        try:
+            self.canvas.unbind_all("<MouseWheel>")
+        except tk.TclError:
+            pass
+        finally:
+            self._mousewheel_bound = False
+
+    def _on_window_destroy(self, event):
+        if event.widget is self.window:
+            self._unbind_mousewheel()
 
     def handle_path_change(self, _event=None):
         self.clear_path_error()
@@ -1083,6 +1106,7 @@ class SettingsWindow:
     def cancel_changes(self):
         """Revert preview theme and close without saving."""
         self.apply_theme_preview(self.original_theme)
+        self._unbind_mousewheel()
         self.window.destroy()
 
     def save_settings(self):
@@ -1130,6 +1154,7 @@ class SettingsWindow:
     def on_close(self):
         """Handle window close by saving settings."""
         self.save_settings()
+        self._unbind_mousewheel()
         self.window.destroy()
 
     def manual_update(self):

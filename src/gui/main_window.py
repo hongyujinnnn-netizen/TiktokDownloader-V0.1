@@ -19,6 +19,7 @@ from core.downloader import TikTokDownloader
 from core.profile_scraper import ProfileScraper
 from utils.config_manager import ConfigManager
 from utils.validators import is_valid_tiktok_url, is_valid_profile_url, is_valid_video_url
+from utils.translator import translate
 import pyperclip
 import threading
 
@@ -31,6 +32,7 @@ class MainWindow:
         self.config = ConfigManager()
         self.downloader = TikTokDownloader()
         self.profile_scraper = ProfileScraper()
+        self.tr = translate
         
         # Download control flags
         self.is_paused = False
@@ -38,7 +40,7 @@ class MainWindow:
         self.is_downloading = False
         
         # Configure window
-        self.root.title(APP_NAME)
+        self.root.title(self.tr("app_title", APP_NAME))
         self.root.geometry("800x700")
         self.root.configure(bg=COLORS["background"])
         self.root.resizable(True, True)  # Allow resizing for fullscreen
@@ -88,7 +90,7 @@ class MainWindow:
         
         title_label = tk.Label(
             title_container,
-            text="TikTok Downloader Pro",
+            text=self.tr("app_title", "TikTok Downloader Pro"),
             font=FONTS["title_large"],
             bg=COLORS["background"],
             fg=COLORS["accent"]
@@ -111,7 +113,7 @@ class MainWindow:
         # Smart Download Section (2-in-1)
         single_label = tk.Label(
             main_card,
-            text="Smart Download (Video or Profile)",
+            text=self.tr("smart_download_heading", "Smart Download (Video or Profile)"),
             font=FONTS["heading"],
             bg=COLORS["card"],
             fg=COLORS["text"]
@@ -121,7 +123,7 @@ class MainWindow:
         # URL Entry
         url_label = tk.Label(
             main_card,
-            text="Paste Video or Profile URL:",
+            text=self.tr("paste_url_any", "Paste Video or Profile URL:"),
             font=FONTS["body"],
             bg=COLORS["card"],
             fg=COLORS["text_secondary"]
@@ -138,7 +140,7 @@ class MainWindow:
         
         paste_btn = create_styled_button(
             url_frame,
-            text="📋 Paste",
+            text=self.tr("paste_button", "\U0001F4CB Paste"),
             command=self.paste_url,
             bg=COLORS["accent"],
             hover_bg="#0EA5E9",
@@ -175,7 +177,7 @@ class MainWindow:
         # Loading indicator for profile detection
         self.profile_loading_label = tk.Label(
             self.profile_options_frame,
-            text="🔄 Detecting profile...",
+            text=self.tr("detecting_profile", "\U0001F501 Detecting profile..."),
             font=FONTS["small"],
             bg=COLORS["card"],
             fg=COLORS["text_secondary"]
@@ -185,7 +187,7 @@ class MainWindow:
         # Download button (changes text based on URL type)
         self.download_btn = create_styled_button(
             main_card,
-            text="⬇ Download",
+            text=self.tr("download_default", "\u2B07\uFE0F Download"),
             command=self.smart_download,
             bg=COLORS["button"],
             hover_bg=COLORS["button_hover"],
@@ -200,7 +202,7 @@ class MainWindow:
         
         self.pause_btn = create_styled_button(
             self.control_buttons_frame,
-            text="⏸ Pause",
+            text=self.tr("pause_label", "\u23F8\uFE0F Pause"),
             command=self.toggle_pause,
             bg=COLORS["accent"],
             hover_bg="#0EA5E9",
@@ -210,7 +212,7 @@ class MainWindow:
         
         self.stop_btn = create_styled_button(
             self.control_buttons_frame,
-            text="⏹ Stop",
+            text=self.tr("stop_label", "\u23F9\uFE0F Stop"),
             command=self.stop_download,
             bg=COLORS["danger"],
             hover_bg="#DC2626",
@@ -240,7 +242,7 @@ class MainWindow:
         
         history_btn = create_styled_button(
             bottom_frame,
-            text="📜 History",
+            text=self.tr("history_button", "\U0001F4DC History"),
             command=self.open_history,
             bg=COLORS["card"],
             hover_bg=COLORS["border"],
@@ -250,7 +252,7 @@ class MainWindow:
         
         settings_btn = create_styled_button(
             bottom_frame,
-            text="⚙ Settings",
+            text=self.tr("settings_button", "\u2699\uFE0F Settings"),
             command=self.open_settings,
             bg=COLORS["card"],
             hover_bg=COLORS["border"],
@@ -260,7 +262,7 @@ class MainWindow:
         
         folder_btn = create_styled_button(
             bottom_frame,
-            text="📁 Open Downloads Folder",
+            text=self.tr("open_downloads_folder", "\U0001F4C1 Open Downloads Folder"),
             command=self.open_downloads_folder,
             bg=COLORS["card"],
             hover_bg=COLORS["border"],
@@ -274,7 +276,7 @@ class MainWindow:
         
         footer_text = tk.Label(
             footer,
-            text=f"Built with Ryu | v{APP_VERSION} | © 2026",
+            text=self.tr("footer_text", "Built with Ryu | v{version} | © 2026").format(version=APP_VERSION),
             font=FONTS["small"],
             bg=COLORS["background"],
             fg=COLORS["text_secondary"]
@@ -305,7 +307,7 @@ class MainWindow:
                 self.validate_url()
             except:
                 self.url_validation_label.config(
-                    text="❌ Failed to paste from clipboard",
+                    text=self.tr("paste_clipboard_failed", "\u274C Failed to paste from clipboard"),
                     fg=COLORS["danger"]
                 )
     
@@ -316,53 +318,53 @@ class MainWindow:
         if not url:
             self.url_validation_label.config(text="")
             self.profile_options_frame.pack_forget()
-            self.download_btn.config(text="⬇ Download")
+            self.download_btn.config(text=self.tr("download_default", "\u2B07\uFE0F Download"))
             return
         
         # Check if it's a profile URL
         if is_valid_profile_url(url):
             self.url_validation_label.config(
-                text="✅ Profile URL detected - Bulk download mode",
+                text=self.tr("profile_url_detected", "\u2705 Profile URL detected - Bulk download mode"),
                 fg=COLORS["accent"]
             )
             self.profile_options_frame.pack(pady=10)
-            self.download_btn.config(text="⬇ Start Profile Download")
+            self.download_btn.config(text=self.tr("download_profile", "\u2B07\uFE0F Start Profile Download"))
             # Try to get profile info
             threading.Thread(target=self.fetch_profile_info, args=(url,), daemon=True).start()
         # Check if it's a video URL
         elif is_valid_video_url(url):
             self.url_validation_label.config(
-                text="✅ Video URL detected - Single download mode",
+                text=self.tr("video_url_detected", "\u2705 Video URL detected - Single download mode"),
                 fg=COLORS["success"]
             )
             self.profile_options_frame.pack_forget()
-            self.download_btn.config(text="⬇ Download Video")
+            self.download_btn.config(text=self.tr("download_video", "\u2B07\uFE0F Download Video"))
         # Valid TikTok URL but not sure which type
         elif is_valid_tiktok_url(url):
             self.url_validation_label.config(
-                text="✅ Valid TikTok URL detected",
+                text=self.tr("valid_url_detected", "\u2705 Valid TikTok URL detected"),
                 fg=COLORS["success"]
             )
             self.profile_options_frame.pack_forget()
-            self.download_btn.config(text="⬇ Download")
+            self.download_btn.config(text=self.tr("download_default", "\u2B07\uFE0F Download"))
         else:
             self.url_validation_label.config(
-                text="❌ Invalid TikTok URL",
+                text=self.tr("invalid_url_message", "\u274C Invalid TikTok URL"),
                 fg=COLORS["danger"]
             )
             self.profile_options_frame.pack_forget()
-            self.download_btn.config(text="⬇ Download")
+            self.download_btn.config(text=self.tr("download_default", "\u2B07\uFE0F Download"))
     
     def smart_download(self):
         """Smart download - detects URL type and downloads accordingly"""
         url = self.url_entry.get().strip()
         
         if not url:
-            self.download_status.show_error("Please enter a URL")
+            self.download_status.show_error(self.tr("empty_url_error", "Please enter a URL"))
             return
         
         if not is_valid_tiktok_url(url):
-            self.download_status.show_error("Invalid TikTok URL")
+            self.download_status.show_error(self.tr("invalid_url_error", "Invalid TikTok URL"))
             return
         
         # Detect URL type and download
@@ -376,17 +378,21 @@ class MainWindow:
         url = self.url_entry.get().strip()
         
         if not url:
-            self.download_status.show_warning("Please paste a TikTok video URL!")
+            self.download_status.show_warning(self.tr("paste_video_prompt", "Please paste a TikTok video URL!"))
             return
         
         if not is_valid_tiktok_url(url):
-            self.download_status.show_error("Invalid TikTok URL!")
+            self.download_status.show_error(self.tr("invalid_url_error_strict", "Invalid TikTok URL!"))
             return
         
         try:
             # Show progress dialog
-            progress = ProgressDialog(self.root, "Downloading Video", mode="indeterminate")
-            progress.update_status("Fetching video information...")
+            progress = ProgressDialog(
+                self.root,
+                self.tr("progress_title_downloading", "Downloading Video"),
+                mode="indeterminate",
+            )
+            progress.update_status(self.tr("progress_status_fetching", "Fetching video information..."))
             
             # Download video
             result = self.downloader.download_video(
@@ -398,17 +404,25 @@ class MainWindow:
             
             if result["success"]:
                 self.download_status.show_success(
-                    f"Downloaded: {result['title'][:50]}..."
+                    self.tr("download_success_message", "Downloaded: {title}...").format(
+                        title=result["title"][:50]
+                    )
                 )
                 self.url_entry.delete(0, tk.END)
                 self.url_validation_label.config(text="")
             else:
-                self.download_status.show_error(f"Download failed: {result['error'][:50]}")
+                self.download_status.show_error(
+                    self.tr("download_failed_message", "Download failed: {error}").format(
+                        error=result.get("error", "Unknown")[:50]
+                    )
+                )
                 
         except Exception as e:
             if 'progress' in locals():
                 progress.close()
-            self.download_status.show_error(f"Error: {str(e)[:50]}")
+            self.download_status.show_error(
+                self.tr("generic_error_message", "Error: {error}").format(error=str(e)[:50])
+            )
     
     def download_profile(self):
         """Download videos from a profile"""
@@ -438,7 +452,7 @@ class MainWindow:
     def _download_profile_thread(self, url, limit):
         """Profile download thread"""
         try:
-            self.download_status.show_info("Starting profile download...")
+            self.download_status.show_info(self.tr("profile_download_start", "Starting profile download..."))
             
             result = self.profile_scraper.download_from_profile(
                 profile_url=url,
@@ -453,7 +467,11 @@ class MainWindow:
             self.root.after(0, self._on_profile_download_complete, result)
             
         except Exception as e:
-            self.root.after(0, self.download_status.show_error, f"Error: {str(e)[:50]}")
+            self.root.after(
+                0,
+                self.download_status.show_error,
+                self.tr("generic_error_message", "Error: {error}").format(error=str(e)[:50]),
+            )
             self.root.after(0, self._reset_ui)
     
     def download_progress_callback(self, current, total, video_name):
@@ -467,20 +485,29 @@ class MainWindow:
             self.root.after(100)
         
         # Update progress label
-        progress_text = f"Downloading {current}/{total}: {video_name[:40]}..."
+        progress_text = self.tr(
+            "profile_progress_text",
+            "Downloading {current}/{total}: {video}...",
+        ).format(current=current, total=total, video=video_name[:40])
         self.root.after(0, self.progress_label.config, {"text": progress_text})
     
     def _on_profile_download_complete(self, result):
         """Handle profile download completion"""
         if result["success"]:
             self.download_status.show_success(
-                f"Downloaded {result['downloaded']}/{result['total']} videos"
+                self.tr("profile_download_success", "Downloaded {done}/{total} videos").format(
+                    done=result["downloaded"], total=result["total"]
+                )
             )
             self.url_entry.delete(0, tk.END)
             self.url_validation_label.config(text="")
             self.profile_options_frame.pack_forget()
         else:
-            self.download_status.show_error(f"Download failed: {result.get('error', 'Unknown error')[:50]}")
+            self.download_status.show_error(
+                self.tr("download_failed_message", "Download failed: {error}").format(
+                    error=result.get("error", "Unknown error")[:50]
+                )
+            )
         
         self._reset_ui()
     
@@ -491,23 +518,23 @@ class MainWindow:
         self.download_btn.config(state="normal")
         self.url_entry.config(state="normal")
         self.progress_label.config(text="")
-        self.pause_btn.config(text="⏸ Pause")
+        self.pause_btn.config(text=self.tr("pause_label", "\u23F8\uFE0F Pause"))
     
     def toggle_pause(self):
         """Toggle pause/resume"""
         self.is_paused = not self.is_paused
         if self.is_paused:
-            self.pause_btn.config(text="▶ Resume")
-            self.download_status.show_info("Download paused")
+            self.pause_btn.config(text=self.tr("resume_label", "\u25B6 Resume"))
+            self.download_status.show_info(self.tr("download_paused", "Download paused"))
         else:
-            self.pause_btn.config(text="⏸ Pause")
-            self.download_status.show_info("Download resumed")
+            self.pause_btn.config(text=self.tr("pause_label", "\u23F8\uFE0F Pause"))
+            self.download_status.show_info(self.tr("download_resumed", "Download resumed"))
     
     def stop_download(self):
         """Stop profile download"""
         self.should_stop = True
         self.is_paused = False
-        self.download_status.show_warning("Stopping download...")
+        self.download_status.show_warning(self.tr("stopping_download", "Stopping download..."))
     
     def fetch_profile_info(self, url):
         """Fetch profile information in background"""
@@ -521,17 +548,23 @@ class MainWindow:
             limit = self.config.get_setting("profile_video_limit", 10)
             
             if limit == 0:
-                info_text = f"👤 @{username} - {video_count} videos available | Downloading ALL videos"
+                info_text = self.tr(
+                    "profile_info_all",
+                    "\U0001F464 @{username} - {count} videos available | Downloading ALL videos",
+                ).format(username=username, count=video_count)
             else:
                 download_count = min(limit, video_count)
-                info_text = f"👤 @{username} - {video_count} videos available | Downloading {download_count} videos"
+                info_text = self.tr(
+                    "profile_info_limited",
+                    "\U0001F464 @{username} - {count} videos available | Downloading {limit} videos",
+                ).format(username=username, count=video_count, limit=download_count)
             
             self.root.after(0, self.profile_loading_label.pack_forget)
             self.root.after(0, self.profile_info_label.config, {"text": info_text})
         except:
             self.root.after(0, self.profile_loading_label.pack_forget)
             self.root.after(0, self.profile_info_label.config, {
-                "text": "⚠️ Could not fetch profile info",
+                "text": self.tr("profile_info_failed", "\u26A0\uFE0F Could not fetch profile info"),
                 "fg": COLORS["warning"]
             })
     
