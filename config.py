@@ -37,6 +37,9 @@ DARK_THEME = {
     "text": "#E5E7EB",            # Light gray text
     "text_secondary": "#9CA3AF",  # Secondary text
     "accent": "#38BDF8",          # Blue accent
+    "secondary": "#8B5CF6",       # Purple secondary
+    "secondary_hover": "#7C3AED", # Darker purple on hover
+    "button_contrast": "#F8FAFC", # Text on colored buttons
     "success": "#10B981",         # Success green
     "warning": "#F59E0B",         # Warning orange
     "border": "#334155",          # Border color
@@ -52,6 +55,9 @@ LIGHT_THEME = {
     "text": "#1E293B",            # Dark text
     "text_secondary": "#64748B",  # Secondary text
     "accent": "#0EA5E9",          # Blue accent
+    "secondary": "#8B5CF6",       # Purple secondary
+    "secondary_hover": "#7C3AED", # Darker purple on hover
+    "button_contrast": "#FFFFFF", # Text on colored buttons
     "success": "#10B981",         # Success green
     "warning": "#F59E0B",         # Warning orange
     "border": "#E2E8F0",          # Border color

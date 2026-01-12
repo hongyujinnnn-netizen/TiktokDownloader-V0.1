@@ -7,7 +7,7 @@ import os
 import sys
 import threading
 import tkinter as tk
-from tkinter import filedialog, ttk
+from tkinter import filedialog, messagebox, ttk
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
@@ -23,6 +23,7 @@ from config import (
 from gui.styles import create_styled_button, create_styled_entry, create_styled_frame
 from gui.progress_dialog import InlineStatus
 from utils.config_manager import ConfigManager
+from utils.translator import translate
 from core.updater import YtdlpUpdater
 
 
@@ -170,6 +171,7 @@ class RadioCardGroup(tk.Frame):
         self.variable = variable or tk.StringVar()
         self.command = command
         self.cards = {}
+        self.widget_metadata = {}
 
         for idx, option in enumerate(options):
             card = tk.Frame(
@@ -193,7 +195,7 @@ class RadioCardGroup(tk.Frame):
                 fg=COLORS["text"],
             )
             title_label.pack(anchor="w")
-            title_label._is_primary = True
+            self.widget_metadata[title_label] = {"is_primary": True}
 
             description = option.get("description")
             if description:
@@ -207,7 +209,7 @@ class RadioCardGroup(tk.Frame):
                     justify="left",
                 )
                 desc_label.pack(anchor="w", pady=(4, 0))
-                desc_label._is_primary = False
+                self.widget_metadata[desc_label] = {"is_primary": False}
             else:
                 desc_label = None
 
@@ -244,7 +246,8 @@ class RadioCardGroup(tk.Frame):
             card.configure(bg=card_bg, highlightbackground=border_color)
             for child in card.winfo_children():
                 child.configure(bg=card_bg)
-                if getattr(child, "_is_primary", False):
+                metadata = self.widget_metadata.get(child, {})
+                if metadata.get("is_primary", False):
                     child.configure(fg=COLORS["background"] if selected else COLORS["text"])
                 else:
                     child.configure(fg=COLORS["background"] if selected else COLORS["text_secondary"])
@@ -255,8 +258,9 @@ class SettingsWindow:
 
     def __init__(self, parent):
         self.window = tk.Toplevel(parent)
-        self.window.title("Settings")
-        self.window.geometry("900x600")
+        self.tr = translate
+        self.window.title(self.tr("settings_window_name", "Settings"))
+        self.window.geometry("950x600")
         self.window.configure(bg=COLORS["background"])
         self.window.minsize(820, 560)
 
@@ -380,7 +384,7 @@ class SettingsWindow:
 
         title = tk.Label(
             header,
-            text="⚙ Settings",
+            text=self.tr("settings_window_header", "⚙ Settings"),
             font=FONTS["title"],
             bg=COLORS["background"],
             fg=COLORS["text"],
@@ -390,7 +394,10 @@ class SettingsWindow:
 
         subtitle = tk.Label(
             header,
-            text="Adjust the experience with instant theme previews and smarter controls.",
+            text=self.tr(
+                "settings_window_subtitle",
+                "Adjust the experience with instant theme previews and smarter controls.",
+            ),
             font=FONTS["body"],
             bg=COLORS["background"],
             fg=COLORS["text_secondary"],
@@ -450,55 +457,75 @@ class SettingsWindow:
         self.register_themable(button_frame, bg="card")
         button_frame.grid(row=2, column=0, sticky="ew", padx=18, pady=(0, 18))
         button_frame.columnconfigure(0, weight=1)
-        button_frame.columnconfigure(2, weight=1)
+        button_frame.columnconfigure(3, weight=1)
 
         self.save_button = create_styled_button(
             button_frame,
-            text="💾 Save Settings",
+            text=self.tr("settings_save_button", "💾 Save Settings"),
             command=self.save_settings,
-            bg=COLORS["accent"],
-            hover_bg="#0D94D8",
+            bg=COLORS["button"],
+            hover_bg=COLORS["button_hover"],
+            fg=COLORS["button_contrast"],
         )
         self.save_button.grid(row=0, column=0, sticky="w", padx=(0, 8), ipadx=18, ipady=7)
-        self.register_themable(self.save_button, bg="accent", fg="text", activebackground="accent", activeforeground="text")
+        self.register_themable(
+            self.save_button,
+            bg="button",
+            fg="button_contrast",
+            activebackground="button",
+            activeforeground="button_contrast",
+        )
 
-        self.reset_button = tk.Button(
+        self.reset_button = create_styled_button(
             button_frame,
-            text="↩ Reset to Defaults",
+            text=self.tr("settings_reset_button", "↩ Reset to Defaults"),
             command=self.reset_to_defaults,
-            font=FONTS["button"],
-            bg=COLORS["card"],
-            fg=COLORS["text"],
-            highlightthickness=1,
-            highlightbackground=COLORS["border"],
-            cursor="hand2",
-            bd=0,
-            padx=18,
-            pady=6,
-            activebackground=COLORS["background"],
-            activeforeground=COLORS["text"],
+            bg=COLORS.get("secondary", COLORS["accent"]),
+            hover_bg=COLORS.get("secondary_hover", "#7C3AED"),
+            fg=COLORS["button_contrast"],
         )
-        self.register_themable(self.reset_button, bg="card", fg="text", highlightbackground="border")
-        self.reset_button.grid(row=0, column=1, padx=8)
+        self.reset_button.grid(row=0, column=1, padx=8, ipadx=18, ipady=7)
+        self.register_themable(
+            self.reset_button,
+            bg="secondary",
+            fg="button_contrast",
+            activebackground="secondary",
+            activeforeground="button_contrast",
+        )
 
-        cancel_button = tk.Button(
+        self.restart_button = create_styled_button(
             button_frame,
-            text="✖ Cancel",
-            command=self.cancel_changes,
-            font=FONTS["button"],
-            bg=COLORS["card"],
-            fg=COLORS["text_secondary"],
-            highlightthickness=1,
-            highlightbackground=COLORS["border"],
-            cursor="hand2",
-            bd=0,
-            padx=18,
-            pady=6,
-            activebackground=COLORS["background"],
-            activeforeground=COLORS["text"],
+            text=self.tr("settings_restart_button", "🔁 Restart App"),
+            command=self.restart_application,
+            bg=COLORS["accent"],
+            hover_bg="#0D94D8",
+            fg=COLORS["button_contrast"],
         )
-        self.register_themable(cancel_button, bg="card", fg="text_secondary", highlightbackground="border")
-        cancel_button.grid(row=0, column=2, sticky="e")
+        self.restart_button.grid(row=0, column=2, padx=8, ipadx=18, ipady=7)
+        self.register_themable(
+            self.restart_button,
+            bg="accent",
+            fg="button_contrast",
+            activebackground="accent",
+            activeforeground="button_contrast",
+        )
+
+        cancel_button = create_styled_button(
+            button_frame,
+            text=self.tr("settings_cancel_button", "✖ Cancel"),
+            command=self.cancel_changes,
+            bg=COLORS["danger"],
+            hover_bg=COLORS.get("danger_hover", "#B91C1C"),
+            fg=COLORS["button_contrast"],
+        )
+        cancel_button.grid(row=0, column=3, sticky="e", ipadx=18, ipady=7)
+        self.register_themable(
+            cancel_button,
+            bg="danger",
+            fg="button_contrast",
+            activebackground="danger",
+            activeforeground="button_contrast",
+        )
 
         self.update_save_state()
 
@@ -554,7 +581,12 @@ class SettingsWindow:
 
     def on_language_change(self, _event=None):
         display = self.language_var.get() or ""
-        self.app_info_label.config(text=f"{APP_NAME} v{APP_VERSION}\nLanguage: {display}")
+        self.app_info_label.config(
+            text=self.tr(
+                "settings_app_info",
+                "{app} v{version}\nLanguage: {language}",
+            ).format(app=APP_NAME, version=APP_VERSION, language=display)
+        )
         self.mark_dirty()
 
     def validate_settings(self):
@@ -564,7 +596,9 @@ class SettingsWindow:
         path = self.path_entry.get().strip()
         if not path:
             self.path_entry.configure(highlightbackground=COLORS["danger"], highlightcolor=COLORS["danger"])
-            self.path_error.config(text="Download path is required.")
+            self.path_error.config(
+                text=self.tr("settings_path_required", "Download path is required."),
+            )
             valid = False
         else:
             self.clear_path_error()
@@ -576,7 +610,12 @@ class SettingsWindow:
             self.clear_profile_limit_error()
         except ValueError:
             self.profile_limit_entry.configure(highlightbackground=COLORS["danger"], highlightcolor=COLORS["danger"])
-            self.profile_limit_error.config(text="Enter a whole number of videos (0 downloads all).")
+            self.profile_limit_error.config(
+                text=self.tr(
+                    "settings_profile_limit_error",
+                    "Enter a whole number of videos (0 downloads all).",
+                ),
+            )
             valid = False
 
         return valid, max(profile_limit_value, 0)
@@ -585,14 +624,14 @@ class SettingsWindow:
         """Create General settings tab."""
         general_frame = tk.Frame(self.notebook, bg=COLORS["card"])
         self.register_themable(general_frame, bg="card")
-        self.notebook.add(general_frame, text="⚙ General")
+        self.notebook.add(general_frame, text=self.tr("settings_tab_general", "⚙ General"))
         general_frame.grid_columnconfigure(0, weight=1)
 
         info_section = self.create_setting_section(
             general_frame,
-            title="Application Overview",
+            title=self.tr("settings_overview_title", "Application Overview"),
             icon="⚙",
-            description="Review version details and language at a glance.",
+            description=self.tr("settings_overview_description", "Review version details and language at a glance."),
         )
 
         self.app_info_label = tk.Label(
@@ -608,9 +647,9 @@ class SettingsWindow:
 
         language_section = self.create_setting_section(
             general_frame,
-            title="Language",
+            title=self.tr("settings_language_title", "Language"),
             icon="🗣",
-            description="Choose the interface language.",
+            description=self.tr("settings_language_description", "Choose the interface language."),
         )
 
         self.language_var = tk.StringVar()
@@ -626,21 +665,43 @@ class SettingsWindow:
         )
         self.language_menu.pack(fill="x", pady=4)
         self.language_menu.bind("<<ComboboxSelected>>", self.on_language_change)
-        self.create_hint_label(language_section, "Restart the app to apply language changes.")
+        self.create_hint_label(
+            language_section,
+            self.tr("settings_language_hint", "Restart the app to apply language changes."),
+        )
 
         theme_section = self.create_setting_section(
             general_frame,
-            title="Appearance",
+            title=self.tr("settings_theme_title", "Appearance"),
             icon="🎨",
-            description="Preview light or dark mode instantly before committing.",
+            description=self.tr(
+                "settings_theme_description",
+                "Preview light or dark mode instantly before committing.",
+            ),
         )
 
         self.theme_var = tk.StringVar(value=self.original_theme)
         theme_cards = RadioCardGroup(
             theme_section,
             options=[
-                {"value": "light", "label": "Light", "icon": "🌞", "description": "Balanced contrast for bright rooms."},
-                {"value": "dark", "label": "Dark", "icon": "🌙", "description": "Dim palette for low-light sessions."},
+                {
+                    "value": "light",
+                    "label": self.tr("theme_option_light_label", "Light"),
+                    "icon": "🌞",
+                    "description": self.tr(
+                        "theme_option_light_description",
+                        "Balanced contrast for bright rooms.",
+                    ),
+                },
+                {
+                    "value": "dark",
+                    "label": self.tr("theme_option_dark_label", "Dark"),
+                    "icon": "🌙",
+                    "description": self.tr(
+                        "theme_option_dark_description",
+                        "Dim palette for low-light sessions.",
+                    ),
+                },
             ],
             variable=self.theme_var,
             command=self.on_theme_change,
@@ -665,7 +726,7 @@ class SettingsWindow:
 
         title = tk.Label(
             preview,
-            text="Theme preview",
+            text=self.tr("theme_preview_title", "Theme preview"),
             font=FONTS["subheading"],
             bg=COLORS["background"],
             fg=COLORS["text"],
@@ -675,7 +736,10 @@ class SettingsWindow:
 
         subtitle = tk.Label(
             preview,
-            text="Buttons, cards, and text adapt instantly to your selection.",
+            text=self.tr(
+                "theme_preview_description",
+                "Buttons, cards, and text adapt instantly to your selection.",
+            ),
             font=FONTS["small"],
             bg=COLORS["background"],
             fg=COLORS["text_secondary"],
@@ -687,7 +751,7 @@ class SettingsWindow:
 
         primary = tk.Label(
             preview,
-            text="Primary action",
+            text=self.tr("theme_preview_primary", "Primary action"),
             font=FONTS["button"],
             bg=COLORS["accent"],
             fg=COLORS["background"],
@@ -698,7 +762,7 @@ class SettingsWindow:
 
         chip = tk.Label(
             preview,
-            text="Secondary",
+            text=self.tr("theme_preview_secondary", "Secondary"),
             font=FONTS["small"],
             bg=COLORS["card"],
             fg=COLORS["text_secondary"],
@@ -720,14 +784,17 @@ class SettingsWindow:
         """Create Download settings tab."""
         download_frame = tk.Frame(self.notebook, bg=COLORS["card"])
         self.register_themable(download_frame, bg="card")
-        self.notebook.add(download_frame, text="📥 Download")
+        self.notebook.add(download_frame, text=self.tr("settings_tab_download", "📥 Download"))
         download_frame.grid_columnconfigure(0, weight=1)
 
         path_section = self.create_setting_section(
             download_frame,
-            title="Download Location",
+            title=self.tr("settings_download_location_title", "Download Location"),
             icon="📂",
-            description="Decide where finished downloads are stored on your device.",
+            description=self.tr(
+                "settings_download_location_description",
+                "Decide where finished downloads are stored on your device.",
+            ),
         )
 
         path_input_frame = tk.Frame(path_section, bg=path_section.cget("bg"))
@@ -740,7 +807,7 @@ class SettingsWindow:
 
         browse_btn = create_styled_button(
             path_input_frame,
-            text="📁 Browse",
+            text=self.tr("settings_browse_button", "📁 Browse"),
             command=self.browse_folder,
             bg=COLORS["accent"],
             hover_bg="#0EA5E9",
@@ -759,59 +826,118 @@ class SettingsWindow:
         )
         self.register_themable(self.path_error, bg="background", fg="danger")
         self.path_error.pack(anchor="w")
-        self.create_hint_label(path_section, "Tip: Point to a dedicated folder to keep downloads tidy.")
+        self.create_hint_label(
+            path_section,
+            self.tr(
+                "settings_download_location_hint",
+                "Tip: Point to a dedicated folder to keep downloads tidy.",
+            ),
+        )
 
         quality_section = self.create_setting_section(
             download_frame,
-            title="Video Quality",
+            title=self.tr("settings_quality_title", "Video Quality"),
             icon="🎞",
-            description="Select your preferred quality. The best available option is used when possible.",
+            description=self.tr(
+                "settings_quality_description",
+                "Select your preferred quality. The best available option is used when possible.",
+            ),
         )
 
         self.quality_var = tk.StringVar(value="best")
         quality_cards = RadioCardGroup(
             quality_section,
             options=[
-                {"value": "best", "label": "Best", "icon": "⭐", "description": "Always grab the highest resolution."},
-                {"value": "high", "label": "High", "icon": "📺", "description": "Great balance of size and quality."},
-                {"value": "medium", "label": "Medium", "icon": "📱", "description": "Optimised for smaller devices."},
-                {"value": "low", "label": "Low", "icon": "🚀", "description": "Fast downloads, smallest files."},
+                {
+                    "value": "best",
+                    "label": self.tr("quality_option_best_label", "Best"),
+                    "icon": "⭐",
+                    "description": self.tr(
+                        "quality_option_best_description",
+                        "Always grab the highest resolution.",
+                    ),
+                },
+                {
+                    "value": "high",
+                    "label": self.tr("quality_option_high_label", "High"),
+                    "icon": "📺",
+                    "description": self.tr(
+                        "quality_option_high_description",
+                        "Great balance of size and quality.",
+                    ),
+                },
+                {
+                    "value": "medium",
+                    "label": self.tr("quality_option_medium_label", "Medium"),
+                    "icon": "📱",
+                    "description": self.tr(
+                        "quality_option_medium_description",
+                        "Optimised for smaller devices.",
+                    ),
+                },
+                {
+                    "value": "low",
+                    "label": self.tr("quality_option_low_label", "Low"),
+                    "icon": "🚀",
+                    "description": self.tr(
+                        "quality_option_low_description",
+                        "Fast downloads, smallest files.",
+                    ),
+                },
             ],
             variable=self.quality_var,
             command=lambda _value: self.mark_dirty(),
         )
         quality_cards.pack(fill="x", pady=4)
         self.radio_groups.append(quality_cards)
-        self.create_hint_label(quality_section, "Higher quality files are larger and may take longer to download.")
+        self.create_hint_label(
+            quality_section,
+            self.tr(
+                "settings_quality_hint",
+                "Higher quality files are larger and may take longer to download.",
+            ),
+        )
 
         audio_section = self.create_setting_section(
             download_frame,
-            title="Audio Conversion",
+            title=self.tr("settings_audio_title", "Audio Conversion"),
             icon="🎧",
-            description="Automatically convert videos to MP3 after download.",
+            description=self.tr(
+                "settings_audio_description",
+                "Automatically convert videos to MP3 after download.",
+            ),
         )
 
         self.convert_mp3_var = tk.BooleanVar()
         mp3_toggle = ToggleSwitch(
             audio_section,
-            text="Convert downloads to MP3",
+            text=self.tr("settings_audio_toggle", "Convert downloads to MP3"),
             variable=self.convert_mp3_var,
             command=self.mark_dirty,
         )
         mp3_toggle.pack(anchor="w", pady=4)
-        Tooltip(mp3_toggle, "Ideal for quickly building playlists without extra steps.")
+        Tooltip(
+            mp3_toggle,
+            self.tr(
+                "settings_audio_tooltip",
+                "Ideal for quickly building playlists without extra steps.",
+            ),
+        )
         self.toggle_switches.append(mp3_toggle)
 
         profile_section = self.create_setting_section(
             download_frame,
-            title="Profile Download Limit",
+            title=self.tr("settings_profile_limit_title", "Profile Download Limit"),
             icon="👤",
-            description="Control how many videos are downloaded when grabbing an entire profile.",
+            description=self.tr(
+                "settings_profile_limit_description",
+                "Control how many videos are downloaded when grabbing an entire profile.",
+            ),
         )
 
         limit_label = tk.Label(
             profile_section,
-            text="Maximum videos per profile:",
+            text=self.tr("settings_profile_limit_label", "Maximum videos per profile:"),
             font=FONTS["body"],
             bg=profile_section.cget("bg"),
             fg=COLORS["text"],
@@ -834,78 +960,122 @@ class SettingsWindow:
         )
         self.register_themable(self.profile_limit_error, bg="background", fg="danger")
         self.profile_limit_error.pack(anchor="w", pady=(3, 0))
-        self.create_hint_label(profile_section, "Set to 0 to download everything. Large profiles may take longer.")
+        self.create_hint_label(
+            profile_section,
+            self.tr(
+                "settings_profile_limit_hint",
+                "Set to 0 to download everything. Large profiles may take longer.",
+            ),
+        )
 
     def create_advanced_tab(self):
         """Create Advanced settings tab."""
         advanced_frame = tk.Frame(self.notebook, bg=COLORS["card"])
         self.register_themable(advanced_frame, bg="card")
-        self.notebook.add(advanced_frame, text="🔧 Advanced")
+        self.notebook.add(advanced_frame, text=self.tr("settings_tab_advanced", "🔧 Advanced"))
         advanced_frame.grid_columnconfigure(0, weight=1)
 
         options_section = self.create_setting_section(
             advanced_frame,
-            title="Download Options",
+            title=self.tr("settings_options_title", "Download Options"),
             icon="🛠",
-            description="Fine-tune how downloads are organised and logged.",
+            description=self.tr(
+                "settings_options_description",
+                "Fine-tune how downloads are organised and logged.",
+            ),
         )
 
         self.save_history_var = tk.BooleanVar()
         history_toggle = ToggleSwitch(
             options_section,
-            text="Save download history",
+            text=self.tr("settings_history_toggle", "Save download history"),
             variable=self.save_history_var,
             command=self.mark_dirty,
         )
         history_toggle.pack(anchor="w", pady=4)
-        Tooltip(history_toggle, "Stores the last 100 downloads so you can revisit them later.")
+        Tooltip(
+            history_toggle,
+            self.tr(
+                "settings_history_tooltip",
+                "Stores the last 100 downloads so you can revisit them later.",
+            ),
+        )
         self.toggle_switches.append(history_toggle)
 
         self.profile_folders_var = tk.BooleanVar()
         folder_toggle = ToggleSwitch(
             options_section,
-            text="Create folders for profile downloads",
+            text=self.tr("settings_profile_folders_toggle", "Create folders for profile downloads"),
             variable=self.profile_folders_var,
             command=self.mark_dirty,
         )
         folder_toggle.pack(anchor="w", pady=4)
-        Tooltip(folder_toggle, "Helpful when saving content from multiple creators at once.")
+        Tooltip(
+            folder_toggle,
+            self.tr(
+                "settings_profile_folders_tooltip",
+                "Helpful when saving content from multiple creators at once.",
+            ),
+        )
         self.toggle_switches.append(folder_toggle)
-        self.create_hint_label(options_section, "Useful when downloading from multiple creators.")
+        self.create_hint_label(
+            options_section,
+            self.tr(
+                "settings_options_hint",
+                "Useful when downloading from multiple creators.",
+            ),
+        )
 
     def create_updates_tab(self):
         """Create Updates tab."""
         updates_frame = tk.Frame(self.notebook, bg=COLORS["card"])
         self.register_themable(updates_frame, bg="card")
-        self.notebook.add(updates_frame, text="🔄 Updates")
+        self.notebook.add(updates_frame, text=self.tr("settings_tab_updates", "🔄 Updates"))
         updates_frame.grid_columnconfigure(0, weight=1)
 
         auto_section = self.create_setting_section(
             updates_frame,
-            title="Automatic Updates",
+            title=self.tr("settings_auto_updates_title", "Automatic Updates"),
             icon="⚡",
-            description="Keep yt-dlp up to date automatically each time the app starts.",
+            description=self.tr(
+                "settings_auto_updates_description",
+                "Keep yt-dlp up to date automatically each time the app starts.",
+            ),
         )
 
         self.auto_update_var = tk.BooleanVar()
         auto_toggle = ToggleSwitch(
             auto_section,
-            text="Check for updates on launch",
+            text=self.tr("settings_auto_updates_toggle", "Check for updates on launch"),
             variable=self.auto_update_var,
             command=self.mark_dirty,
         )
         auto_toggle.pack(anchor="w", pady=4)
-        Tooltip(auto_toggle, "Runs a quick update check every time you open the app.")
+        Tooltip(
+            auto_toggle,
+            self.tr(
+                "settings_auto_updates_tooltip",
+                "Runs a quick update check every time you open the app.",
+            ),
+        )
         self.toggle_switches.append(auto_toggle)
 
         manual_section = self.create_setting_section(
             updates_frame,
-            title="Manual Update",
+            title=self.tr("settings_manual_update_title", "Manual Update"),
             icon="🔁",
-            description="Update yt-dlp immediately when you need the latest fixes.",
+            description=self.tr(
+                "settings_manual_update_description",
+                "Update yt-dlp immediately when you need the latest fixes.",
+            ),
         )
 
-        self.current_version_var = tk.StringVar(value=f"Current yt-dlp version: {self.updater.get_version()}")
+        self.current_version_var = tk.StringVar(
+            value=self.tr(
+                "settings_manual_update_current_version",
+                "Current yt-dlp version: {version}",
+            ).format(version=self.updater.get_version())
+        )
         current_version = tk.Label(
             manual_section,
             textvariable=self.current_version_var,
@@ -918,7 +1088,7 @@ class SettingsWindow:
 
         self.update_button = create_styled_button(
             manual_section,
-            text="🔄 Update yt-dlp",
+            text=self.tr("settings_manual_update_button", "🔄 Update yt-dlp"),
             command=self.manual_update,
             bg=COLORS["success"],
             hover_bg="#059669",
@@ -941,7 +1111,13 @@ class SettingsWindow:
         )
         self.register_themable(self.update_status_label, bg="background", fg="text_secondary")
         self.update_status_label.pack(anchor="w", pady=(4, 0))
-        self.create_hint_label(manual_section, "Requires an active internet connection.")
+        self.create_hint_label(
+            manual_section,
+            self.tr(
+                "settings_manual_update_hint",
+                "Requires an active internet connection.",
+            ),
+        )
 
     def create_setting_section(self, parent, title, icon=None, description=None):
         """Create a styled section container with optional description."""
@@ -1011,13 +1187,20 @@ class SettingsWindow:
         self.register_themable(hint, bg="background", fg="text_secondary")
         return hint
 
+    def _update_app_info_label(self, language_display):
+        info_text = self.tr(
+            "settings_app_info",
+            "{app} v{version}\nLanguage: {language}",
+        ).format(app=APP_NAME, version=APP_VERSION, language=language_display)
+        self.app_info_label.config(text=info_text)
+
     def load_settings(self):
         """Load current settings."""
         self.suppress_change = True
 
         download_path = self.config.get_setting("download_path", "")
         self.path_entry.delete(0, tk.END)
-        self.path_entry.insert(0, download_path)
+        self.path_entry.insert(0, download_path or "")
         self.clear_path_error()
 
         theme_value = self.config.get_setting("theme", "light")
@@ -1031,20 +1214,20 @@ class SettingsWindow:
             quality_value = "best"
         self.quality_var.set(quality_value)
 
-        language_code = self.config.get_setting("language", "en")
+        language_code = self.config.get_setting("language", "en") or "en"
         language_display = LANGUAGES.get(language_code, language_code.upper())
         if getattr(self, "language_options", None) and language_display in self.language_options:
-            self.language_var.set(language_display)
+            self.language_var.set(language_display if language_display else "")
         elif getattr(self, "language_options", None):
             first_language = next(iter(self.language_options.keys()))
             self.language_var.set(first_language)
             language_display = first_language
-        self.app_info_label.config(text=f"{APP_NAME} v{APP_VERSION}\nLanguage: {language_display}")
+        self._update_app_info_label(language_display if language_display else "")
 
-        self.auto_update_var.set(self.config.get_setting("auto_update_ytdlp", True))
-        self.save_history_var.set(self.config.get_setting("save_history", True))
-        self.profile_folders_var.set(self.config.get_setting("create_profile_folders", True))
-        self.convert_mp3_var.set(self.config.get_setting("convert_to_mp3", False))
+        self.auto_update_var.set(bool(self.config.get_setting("auto_update_ytdlp", True)))
+        self.save_history_var.set(bool(self.config.get_setting("save_history", True)))
+        self.profile_folders_var.set(bool(self.config.get_setting("create_profile_folders", True)))
+        self.convert_mp3_var.set(bool(self.config.get_setting("convert_to_mp3", False)))
 
         limit = self.config.get_setting("profile_video_limit", 10)
         self.profile_limit_entry.delete(0, tk.END)
@@ -1082,11 +1265,11 @@ class SettingsWindow:
         language_code = defaults.get("language", "en")
         language_display = LANGUAGES.get(language_code, language_code.upper())
         if getattr(self, "language_options", None) and language_display in self.language_options:
-            self.language_var.set(language_display)
+            self.language_var.set(language_display if language_display else "")
         else:
-            self.language_var.set(language_display)
+            self.language_var.set(language_display if language_display else "")
 
-        self.app_info_label.config(text=f"{APP_NAME} v{APP_VERSION}\nLanguage: {language_display}")
+        self._update_app_info_label(language_display if language_display else "")
 
         self.auto_update_var.set(defaults.get("auto_update_ytdlp", True))
         self.save_history_var.set(defaults.get("save_history", True))
@@ -1101,7 +1284,9 @@ class SettingsWindow:
         self.suppress_change = False
         self.dirty = True
         self.update_save_state()
-        self.settings_status.show_info("Defaults restored. Save to keep changes.")
+        self.settings_status.show_info(
+            self.tr("settings_defaults_restored", "Defaults restored. Save to keep changes."),
+        )
 
     def cancel_changes(self):
         """Revert preview theme and close without saving."""
@@ -1109,11 +1294,60 @@ class SettingsWindow:
         self._unbind_mousewheel()
         self.window.destroy()
 
+    def restart_application(self):
+        """Restart the whole application process."""
+        if self.dirty:
+            self.save_settings()
+            if self.dirty:
+                return
+
+        confirm = messagebox.askyesno(
+            self.tr("settings_restart_confirm_title", "Restart Required"),
+            self.tr("settings_restart_confirm_message", "Restart the app now to apply changes?"),
+        )
+        if not confirm:
+            return
+
+        self.settings_status.show_info(
+            self.tr("settings_restart_in_progress", "Restarting application..."),
+        )
+
+        args = list(sys.argv)
+        if not args:
+            args = [os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "run.py"))]
+
+        self.window.after(150, lambda: self._perform_restart(tuple(args)))
+
+    def _perform_restart(self, args):
+        python = sys.executable
+        try:
+            self._unbind_mousewheel()
+            try:
+                self.window.grab_release()
+            except tk.TclError:
+                pass
+            self.window.withdraw()
+            self.window.update_idletasks()
+            os.execl(python, python, *args)
+        except Exception as exc:
+            self.window.deiconify()
+            if getattr(self, "canvas", None) and not self._mousewheel_bound:
+                try:
+                    self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)
+                    self._mousewheel_bound = True
+                except tk.TclError:
+                    pass
+            self.settings_status.show_error(
+                self.tr("settings_restart_failed", "Failed to restart application: {error}").format(error=exc)
+            )
+
     def save_settings(self):
         """Save settings."""
         valid, profile_limit = self.validate_settings()
         if not valid:
-            self.settings_status.show_error("Fix highlighted fields before saving.")
+            self.settings_status.show_error(
+                self.tr("settings_validation_error", "Fix highlighted fields before saving."),
+            )
             return
 
         selected_language = self.language_var.get() if hasattr(self, "language_var") else ""
@@ -1145,11 +1379,13 @@ class SettingsWindow:
         self.preview_theme = theme_value
 
         language_display = LANGUAGES.get(language_code, selected_language or language_code.upper())
-        self.app_info_label.config(text=f"{APP_NAME} v{APP_VERSION}\nLanguage: {language_display}")
+        self._update_app_info_label(language_display)
 
         self.dirty = False
         self.update_save_state()
-        self.settings_status.show_success("Settings saved successfully!")
+        self.settings_status.show_success(
+            self.tr("settings_saved_success", "Settings saved successfully!"),
+        )
 
     def on_close(self):
         """Handle window close by saving settings."""
@@ -1162,10 +1398,15 @@ class SettingsWindow:
         if self.update_thread and self.update_thread.is_alive():
             return
 
-        self.update_status_label.config(text="Checking for updates...", fg=COLORS["text_secondary"])
+        self.update_status_label.config(
+            text=self.tr("settings_update_checking", "Checking for updates..."),
+            fg=COLORS["text_secondary"],
+        )
         self.update_button.config(state="disabled")
         self.update_progress.start(10)
-        self.settings_status.show_info("Updating yt-dlp...")
+        self.settings_status.show_info(
+            self.tr("settings_update_progress", "Updating yt-dlp..."),
+        )
 
         def worker():
             try:
@@ -1182,12 +1423,23 @@ class SettingsWindow:
         self.update_button.config(state="normal")
 
         if result.get("success"):
-            self.current_version_var.set(f"Current yt-dlp version: {self.updater.get_version()}")
-            message = result.get("message", "yt-dlp updated successfully!")
+            self.current_version_var.set(
+                self.tr(
+                    "settings_manual_update_current_version",
+                    "Current yt-dlp version: {version}",
+                ).format(version=self.updater.get_version())
+            )
+            message = result.get(
+                "message",
+                self.tr("settings_update_success_message", "yt-dlp updated successfully!"),
+            )
             self.update_status_label.config(text=f"✅ {message}", fg=COLORS["success"])
             self.settings_status.show_success(message)
         else:
-            message = result.get("message", "Update failed")
+            message = result.get(
+                "message",
+                self.tr("settings_update_failure_message", "Update failed"),
+            )
             trimmed = message[:120]
             self.update_status_label.config(text=f"❌ {trimmed}", fg=COLORS["danger"])
             self.settings_status.show_error(trimmed)

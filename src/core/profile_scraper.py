@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import sys
 import re
+from typing import Any
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 from config import DOWNLOADS_DIR
@@ -36,7 +37,7 @@ class ProfileScraper:
             int: Number of videos
         """
         try:
-            ydl_opts = {
+            ydl_opts: dict[str, Any] = {
                 'quiet': True,
                 'extract_flat': True,
                 'skip_download': True,
@@ -93,7 +94,8 @@ class ProfileScraper:
             username = self.extract_username(profile_url)
             
             # Prepare output path
-            output_path = Path(self.config.get_setting("download_path"))
+            download_path = self.config.get_setting("download_path") or DOWNLOADS_DIR
+            output_path = Path(download_path)
             
             if create_folder:
                 output_path = output_path / f"@{username}"

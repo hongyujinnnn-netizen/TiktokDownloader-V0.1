@@ -47,11 +47,12 @@ def apply_styles(root):
     )
 
 
-def create_styled_button(parent, text, command, bg=None, hover_bg=None, font=None, **kwargs):
+def create_styled_button(parent, text, command, bg=None, hover_bg=None, font=None, fg=None, **kwargs):
     """Create a styled button with hover effect"""
     bg_color = bg or COLORS["button"]
     hover_color = hover_bg or COLORS["button_hover"]
     button_font = font or FONTS["button"]
+    text_color = fg or COLORS["text"]
     
     button = tk.Button(
         parent,
@@ -59,9 +60,9 @@ def create_styled_button(parent, text, command, bg=None, hover_bg=None, font=Non
         command=command,
         font=button_font,
         bg=bg_color,
-        fg=COLORS["text"],
+        fg=text_color,
         activebackground=hover_color,
-        activeforeground=COLORS["text"],
+        activeforeground=text_color,
         relief="flat",
         cursor="hand2",
         borderwidth=0,

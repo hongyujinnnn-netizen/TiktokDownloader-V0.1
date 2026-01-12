@@ -7,6 +7,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import sys
 import os
+import re
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 from config import APP_NAME, COLORS, FONTS, APP_VERSION
@@ -38,10 +39,14 @@ class MainWindow:
         self.is_paused = False
         self.should_stop = False
         self.is_downloading = False
+        self.is_batch_downloading = False
+        self.import_button = None
+        self.pending_batch_links = []
+        self.pending_batch_ignored = []
         
         # Configure window
         self.root.title(self.tr("app_title", APP_NAME))
-        self.root.geometry("800x700")
+        self.root.geometry("900x700")
         self.root.configure(bg=COLORS["background"])
         self.root.resizable(True, True)  # Allow resizing for fullscreen
         
@@ -147,6 +152,16 @@ class MainWindow:
             font=FONTS["emoji"]
         )
         paste_btn.pack(side="left", ipadx=10, ipady=8)
+
+        self.import_button = create_styled_button(
+            url_frame,
+            text=self.tr("import_links_button", "📂 Import Links"),
+            command=self.import_links_from_file,
+            bg=COLORS["accent"],
+            hover_bg="#0EA5E9",
+            font=FONTS["emoji"]
+        )
+        self.import_button.pack(side="left", padx=(10, 0), ipadx=10, ipady=8)
         
         # URL validation feedback
         self.url_validation_label = tk.Label(
@@ -311,8 +326,257 @@ class MainWindow:
                     fg=COLORS["danger"]
                 )
     
+    def import_links_from_file(self):
+        """Import multiple TikTok links from a text file and download sequentially."""
+        if self.is_batch_downloading or self.is_downloading:
+            self.download_status.show_warning(
+                self.tr("batch_busy_warning", "Please wait for the current download to finish."),
+            )
+            return
+
+        file_path = filedialog.askopenfilename(
+            title=self.tr("batch_file_dialog_title", "Select text file with TikTok links"),
+            filetypes=[
+                (self.tr("batch_file_dialog_filter", "Text Files (*.txt)"), "*.txt"),
+                (self.tr("batch_file_dialog_filter_all", "All Files"), "*.*"),
+            ],
+        )
+        if not file_path:
+            return
+
+        try:
+            with open(file_path, "r", encoding="utf-8") as file_handle:
+                lines = [line.strip() for line in file_handle if line.strip()]
+        except Exception as exc:
+            self.download_status.show_error(
+                self.tr("batch_file_read_error", "Failed to read file: {error}").format(error=str(exc)[:80])
+            )
+            return
+
+        valid_links = []
+        ignored_links = []
+        for line in lines:
+            if is_valid_tiktok_url(line):
+                valid_links.append(line)
+            else:
+                ignored_links.append(line)
+
+        if not valid_links:
+            self.download_status.show_error(
+                self.tr("batch_no_valid_links", "No valid TikTok links found in the selected file."),
+            )
+            return
+
+        self.pending_batch_links = valid_links
+        self.pending_batch_ignored = ignored_links
+
+        summary = self.tr(
+            "batch_ready_message",
+            "Loaded {count} links. Press Download to begin.",
+        ).format(count=len(valid_links))
+
+        if ignored_links:
+            summary += " " + self.tr(
+                "batch_ready_ignored",
+                "Ignored {count} entries that were not valid TikTok URLs.",
+            ).format(count=len(ignored_links))
+
+        self.download_status.show_info(summary)
+
+        if valid_links:
+            self.url_entry.delete(0, tk.END)
+            self.url_entry.insert(0, valid_links[0])
+            self.validate_url()
+
+    def _batch_download_thread(self, links, ignored_links):
+        """Perform sequential downloads for imported links."""
+        convert_to_mp3 = self.config.get_setting("convert_to_mp3", False)
+        success_count = 0
+        failures = []
+
+        total = len(links)
+        try:
+            for index, link in enumerate(links, start=1):
+                progress_text = self.tr(
+                    "batch_progress_message",
+                    "Downloading {index}/{total}...",
+                ).format(index=index, total=total)
+                self.root.after(0, self.download_status.show_info, progress_text)
+
+                result = self.downloader.download_video(
+                    link,
+                    convert_to_mp3=convert_to_mp3,
+                    source="batch",
+                )
+
+                if result.get("success"):
+                    success_count += 1
+                else:
+                    failures.append(
+                        {
+                            "url": link,
+                            "error": result.get("error", "Unknown error"),
+                        }
+                    )
+        except Exception as exc:  # Catch unexpected errors to restore UI properly
+            failures.append({"url": "unexpected", "error": str(exc)})
+
+        self.root.after(
+            0,
+            self._on_batch_download_complete,
+            links,
+            success_count,
+            failures,
+            ignored_links,
+        )
+
+    def _on_batch_download_complete(self, links, success_count, failures, ignored_links):
+        """Handle UI updates after batch download finishes."""
+        total = len(links)
+        failed_count = len(failures)
+        ignored_count = len(ignored_links)
+
+        summary = self.tr(
+            "batch_complete_summary",
+            "Batch complete: {success}/{total} downloaded.",
+        ).format(success=success_count, total=total)
+
+        if failed_count:
+            summary += " " + self.tr(
+                "batch_complete_failed",
+                "{failed} failed.",
+            ).format(failed=failed_count)
+
+        if ignored_count:
+            summary += " " + self.tr(
+                "batch_complete_invalid",
+                "{invalid} ignored.",
+            ).format(invalid=ignored_count)
+
+        if success_count == total and failed_count == 0:
+            self.download_status.show_success(summary)
+        elif success_count > 0:
+            detail = ""
+            if failed_count:
+                first_error = failures[0].get("error", "Unknown error")
+                detail = " " + self.tr(
+                    "batch_failure_example",
+                    "Example error: {error}",
+                ).format(error=str(first_error)[:80])
+            self.download_status.show_warning(summary + detail)
+        else:
+            detail = ""
+            if failed_count:
+                first_error = failures[0].get("error", "Unknown error")
+                detail = " " + self.tr(
+                    "batch_failure_example",
+                    "Example error: {error}",
+                ).format(error=str(first_error)[:80])
+            self.download_status.show_error(summary + detail)
+
+        self.download_btn.config(state="normal")
+        if hasattr(self, "import_button") and self.import_button:
+            self.import_button.config(state="normal")
+
+        self.is_batch_downloading = False
+        self.url_entry.config(state="normal")
+        self.url_entry.delete(0, tk.END)
+        self.url_validation_label.config(text="")
+
+    def _start_batch_download(self):
+        """Initialize batch download after user confirmation."""
+        if not self.pending_batch_links:
+            return
+
+        links = list(self.pending_batch_links)
+        ignored = list(self.pending_batch_ignored)
+        self.pending_batch_links = []
+        self.pending_batch_ignored = []
+
+        limit = self._safe_int(self.config.get_setting("profile_video_limit", 0))
+        limit_notice = ""
+        if limit > 0:
+            links, skipped_due_to_limit = self._apply_profile_limit(links, limit)
+            if skipped_due_to_limit:
+                ignored.extend(skipped_due_to_limit)
+                limit_notice = self.tr(
+                    "batch_limit_notice",
+                    "Respecting limit of {limit} per profile. Skipping {skipped} extra entries.",
+                ).format(limit=limit, skipped=len(skipped_due_to_limit))
+
+        if not links:
+            ignored_count = len(ignored)
+            if ignored_count:
+                self.download_status.show_warning(
+                    self.tr(
+                        "batch_limit_all_skipped",
+                        "All imported links exceeded the per-profile limit ({limit}). Nothing to download.",
+                    ).format(limit=limit)
+                )
+            else:
+                self.download_status.show_warning(
+                    self.tr("batch_no_links_after_limit", "No links available after applying limits.")
+                )
+            return
+
+        self.is_batch_downloading = True
+        self.download_btn.config(state="disabled")
+        if self.import_button:
+            self.import_button.config(state="disabled")
+        self.url_entry.config(state="disabled")
+
+        start_message = self.tr(
+            "batch_start_message",
+            "Starting batch download ({count} links)...",
+        ).format(count=len(links))
+        if limit_notice:
+            start_message += " " + limit_notice
+        self.download_status.show_info(start_message)
+
+        thread = threading.Thread(
+            target=self._batch_download_thread,
+            args=(links, ignored),
+            daemon=True,
+        )
+        thread.start()
+
+    def _safe_int(self, value):
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return 0
+
+    def _apply_profile_limit(self, links, limit):
+        counts = {}
+        kept = []
+        skipped = []
+        for link in links:
+            profile = self._extract_profile_handle(link) or "__unknown__"
+            current = counts.get(profile, 0)
+            if current >= limit:
+                skipped.append(link)
+                continue
+            counts[profile] = current + 1
+            kept.append(link)
+        return kept, skipped
+
+    def _extract_profile_handle(self, url):
+        if not url:
+            return None
+        match = re.search(r"@([A-Za-z0-9._-]+)", url)
+        if not match:
+            return None
+        return match.group(1).lower()
+
     def validate_url(self, event=None):
         """Validate URL in real-time and detect type"""
+        if event is not None and self.pending_batch_links:
+            self.pending_batch_links = []
+            self.pending_batch_ignored = []
+            self.download_status.show_info(
+                self.tr("batch_cancelled_message", "Batch import cleared. Ready for single download."),
+            )
+
         url = self.url_entry.get().strip()
         
         if not url:
@@ -357,6 +621,16 @@ class MainWindow:
     
     def smart_download(self):
         """Smart download - detects URL type and downloads accordingly"""
+        if self.is_batch_downloading:
+            self.download_status.show_warning(
+                self.tr("batch_busy_warning", "Please wait for the current download to finish."),
+            )
+            return
+
+        if self.pending_batch_links:
+            self._start_batch_download()
+            return
+
         url = self.url_entry.get().strip()
         
         if not url:
