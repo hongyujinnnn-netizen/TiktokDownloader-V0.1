@@ -105,9 +105,10 @@ DEFAULT_SETTINGS = {
 YTDLP_OPTIONS = {
     'format': 'best',
     'outtmpl': '%(title)s.%(ext)s',
-    'quiet': False,
-    'no_warnings': False,
+    'quiet': True,  # Suppress verbose output
+    'no_warnings': True,  # Suppress warnings
     'extract_flat': False,
+    'ignoreerrors': False,  # Don't ignore errors, but handle them gracefully
 }
 
 # Supported Languages

@@ -490,7 +490,7 @@ class ProfileDownloaderWindow:
             self.current_video_label.config(text="")
             self.status_label.config(text="Ready")
     
-    def download_progress_callback(self, message, current=None, total=None, video_name=None):
+    def download_progress_callback(self, message, current=None, total=None, video_name=None, status=None):
         """Enhanced progress callback with current video info"""
         self.log_progress(message)
         

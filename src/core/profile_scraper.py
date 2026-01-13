@@ -16,6 +16,7 @@ from core.downloader import TikTokDownloader
 from utils.validators import is_valid_tiktok_url
 from utils.config_manager import ConfigManager
 from utils.file_manager import FileManager
+from utils.logger import get_logger
 
 
 class ProfileScraper:
@@ -25,6 +26,7 @@ class ProfileScraper:
         self.downloader = TikTokDownloader()
         self.config = ConfigManager()
         self.file_manager = FileManager()
+        self.logger = get_logger("ProfileScraper")
     
     def get_profile_video_count(self, profile_url):
         """
@@ -39,6 +41,7 @@ class ProfileScraper:
         try:
             ydl_opts: dict[str, Any] = {
                 'quiet': True,
+                'no_warnings': True,
                 'extract_flat': True,
                 'skip_download': True,
             }
@@ -104,6 +107,7 @@ class ProfileScraper:
             # Get video list
             ydl_opts = {
                 'quiet': True,
+                'no_warnings': True,
                 'extract_flat': True,
                 'skip_download': True,
             }
@@ -148,7 +152,13 @@ class ProfileScraper:
                     video_title = f"Video {idx}"
                     
                     if progress_callback:
-                        progress_callback(idx, len(video_urls), video_title)
+                        progress_callback(
+                            message=f"Downloading video {idx}/{len(video_urls)}...",
+                            current=idx,
+                            total=len(video_urls),
+                            video_name=video_title,
+                            status="downloading"
+                        )
                     
                     result = self.downloader.download_video(
                         url=video_url,
@@ -159,11 +169,44 @@ class ProfileScraper:
                     
                     if result["success"]:
                         downloaded += 1
+                        if progress_callback:
+                            progress_callback(
+                                message=f"✅ Downloaded video {idx}",
+                                current=idx,
+                                total=len(video_urls),
+                                video_name=video_title,
+                                status="success"
+                            )
                     else:
                         failed += 1
+                        # Log detailed error for debugging
+                        error_detail = result.get("error", "Unknown error")
+                        self.logger.error(f"Failed to download video {idx} ({video_url}): {error_detail}")
+                        
+                        # Show simple status to user
+                        if progress_callback:
+                            progress_callback(
+                                message=f"❌ Failed to download video {idx} (Total errors: {failed})",
+                                current=idx,
+                                total=len(video_urls),
+                                video_name=video_title,
+                                status="failed"
+                            )
                 
                 except Exception as e:
                     failed += 1
+                    # Log detailed exception for debugging
+                    self.logger.error(f"Exception downloading video {idx} ({video_url}): {str(e)}", exc_info=True)
+                    
+                    # Show simple status to user
+                    if progress_callback:
+                        progress_callback(
+                            message=f"❌ Error downloading video {idx} (Total errors: {failed})",
+                            current=idx,
+                            total=len(video_urls),
+                            video_name=video_title,
+                            status="error"
+                        )
             
             return {
                 "success": True,
@@ -190,6 +233,7 @@ class ProfileScraper:
         try:
             ydl_opts = {
                 'quiet': True,
+                'no_warnings': True,
                 'extract_flat': True,
                 'skip_download': True,
             }

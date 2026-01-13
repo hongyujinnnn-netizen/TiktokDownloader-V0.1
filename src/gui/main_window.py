@@ -21,6 +21,7 @@ from core.profile_scraper import ProfileScraper
 from utils.config_manager import ConfigManager
 from utils.validators import is_valid_tiktok_url, is_valid_profile_url, is_valid_video_url
 from utils.translator import translate
+from utils.logger import get_logger
 import pyperclip
 import threading
 
@@ -34,6 +35,7 @@ class MainWindow:
         self.downloader = TikTokDownloader()
         self.profile_scraper = ProfileScraper()
         self.tr = translate
+        self.logger = get_logger("MainWindow")
         
         # Download control flags
         self.is_paused = False
@@ -436,6 +438,14 @@ class MainWindow:
         failed_count = len(failures)
         ignored_count = len(ignored_links)
 
+        # Log detailed errors for debugging
+        if failures:
+            self.logger.info(f"Batch download completed with {failed_count} failures:")
+            for idx, failure in enumerate(failures, 1):
+                url = failure.get("url", "Unknown URL")
+                error = failure.get("error", "Unknown error")
+                self.logger.error(f"  Failure {idx}: {url} - {error}")
+
         summary = self.tr(
             "batch_complete_summary",
             "Batch complete: {success}/{total} downloaded.",
@@ -453,26 +463,13 @@ class MainWindow:
                 "{invalid} ignored.",
             ).format(invalid=ignored_count)
 
+        # Show short status without detailed error messages
         if success_count == total and failed_count == 0:
             self.download_status.show_success(summary)
         elif success_count > 0:
-            detail = ""
-            if failed_count:
-                first_error = failures[0].get("error", "Unknown error")
-                detail = " " + self.tr(
-                    "batch_failure_example",
-                    "Example error: {error}",
-                ).format(error=str(first_error)[:80])
-            self.download_status.show_warning(summary + detail)
+            self.download_status.show_warning(summary)
         else:
-            detail = ""
-            if failed_count:
-                first_error = failures[0].get("error", "Unknown error")
-                detail = " " + self.tr(
-                    "batch_failure_example",
-                    "Example error: {error}",
-                ).format(error=str(first_error)[:80])
-            self.download_status.show_error(summary + detail)
+            self.download_status.show_error(summary)
 
         self.download_btn.config(state="normal")
         if hasattr(self, "import_button") and self.import_button:

@@ -58,7 +58,7 @@ A professional, feature-rich TikTok video downloader with a modern GUI built wit
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/yourusername/TiktokDownloader-V1.git
+git clone https://github.com/hongyujinnnn-netizen/TiktokDownloader-V0.1.git
 cd TiktokDownloader-V1
 ```
 
@@ -257,6 +257,6 @@ For issues, questions, or suggestions, please open an issue on GitHub.
 
 ---
 
-Made with ❤️ by [Your Name]
+Made with ❤️ by Ryu
 
 **Star ⭐ this repository if you find it helpful!**
