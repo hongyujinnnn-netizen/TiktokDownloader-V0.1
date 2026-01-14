@@ -43,8 +43,10 @@ class MainWindow:
         self.is_downloading = False
         self.is_batch_downloading = False
         self.import_button = None
-        self.pending_batch_links = []
+        self.pending_batch_tasks = []
         self.pending_batch_ignored = []
+        self.pending_batch_duplicates = []
+        self._batch_user_requested = False
         
         # Configure window
         self.root.title(self.tr("app_title", APP_NAME))
@@ -355,27 +357,73 @@ class MainWindow:
             )
             return
 
-        valid_links = []
-        ignored_links = []
-        for line in lines:
-            if is_valid_tiktok_url(line):
-                valid_links.append(line)
-            else:
-                ignored_links.append(line)
+        if not lines:
+            self.download_status.show_warning(
+                self.tr("batch_empty_file", "Selected file does not contain any links."),
+            )
+            return
 
-        if not valid_links:
+        tasks = []  # Batch items with url/type metadata
+        ignored_links = []
+        duplicate_links = []
+        seen = set()
+
+        for line in lines:
+            normalized = line.strip()
+            if not normalized:
+                continue
+
+            key = normalized.lower()
+            if key in seen:
+                duplicate_links.append(normalized)
+                continue
+            seen.add(key)
+
+            if is_valid_video_url(normalized):
+                tasks.append({"url": normalized, "type": "video"})
+            elif is_valid_profile_url(normalized):
+                tasks.append({"url": normalized, "type": "profile"})
+            elif is_valid_tiktok_url(normalized):
+                tasks.append({"url": normalized, "type": "video"})
+            else:
+                ignored_links.append(normalized)
+
+        if not tasks:
             self.download_status.show_error(
                 self.tr("batch_no_valid_links", "No valid TikTok links found in the selected file."),
             )
             return
 
-        self.pending_batch_links = valid_links
+        self.pending_batch_tasks = tasks
         self.pending_batch_ignored = ignored_links
+        self.pending_batch_duplicates = duplicate_links
+        self._batch_user_requested = False
+
+        video_count = sum(1 for task in tasks if task.get("type") == "video")
+        profile_count = sum(1 for task in tasks if task.get("type") == "profile")
 
         summary = self.tr(
             "batch_ready_message",
             "Loaded {count} links. Press Download to begin.",
-        ).format(count=len(valid_links))
+        ).format(count=len(tasks))
+
+        detail_parts = []
+        if video_count:
+            detail_parts.append(
+                self.tr("batch_ready_videos", "{count} videos").format(count=video_count)
+            )
+        if profile_count:
+            detail_parts.append(
+                self.tr("batch_ready_profiles", "{count} profiles").format(count=profile_count)
+            )
+        if detail_parts:
+            summary += " (" + ", ".join(detail_parts) + ")"
+
+        if duplicate_links:
+            summary += " " + self.tr(
+                "batch_ready_duplicates",
+                "Skipped {count} duplicate entries.",
+            ).format(count=len(duplicate_links))
 
         if ignored_links:
             summary += " " + self.tr(
@@ -385,58 +433,155 @@ class MainWindow:
 
         self.download_status.show_info(summary)
 
-        if valid_links:
-            self.url_entry.delete(0, tk.END)
-            self.url_entry.insert(0, valid_links[0])
-            self.validate_url()
+        first_url = tasks[0]["url"] if tasks else ""
+        self.url_entry.delete(0, tk.END)
+        if first_url:
+            self.url_entry.insert(0, first_url)
+        self.validate_url()
 
-    def _batch_download_thread(self, links, ignored_links):
+    def _batch_download_thread(self, tasks, ignored_links, duplicate_links):
         """Perform sequential downloads for imported links."""
         convert_to_mp3 = self.config.get_setting("convert_to_mp3", False)
+        create_folders = self.config.get_setting("create_profile_folders", True)
+        profile_limit = self._safe_int(self.config.get_setting("profile_video_limit", 10))
+
         success_count = 0
         failures = []
+        total = len(tasks)
 
-        total = len(links)
+        def report(status_method: str, message: str) -> None:
+            self.root.after(0, getattr(self.download_status, status_method), message)
+
         try:
-            for index, link in enumerate(links, start=1):
-                progress_text = self.tr(
+            for index, task in enumerate(tasks, start=1):
+                url = task.get("url")
+                kind = task.get("type", "video")
+                prefix = self.tr(
+                    "batch_progress_prefix",
+                    "[{index}/{total}]",
+                ).format(index=index, total=total)
+
+                progress_detail = self.tr(
                     "batch_progress_message",
                     "Downloading {index}/{total}...",
                 ).format(index=index, total=total)
-                self.root.after(0, self.download_status.show_info, progress_text)
+                report("show_info", f"{prefix} {progress_detail}")
 
-                result = self.downloader.download_video(
-                    link,
-                    convert_to_mp3=convert_to_mp3,
-                    source="batch",
-                )
-
-                if result.get("success"):
-                    success_count += 1
+                if kind == "profile":
+                    try:
+                        result = self.profile_scraper.download_from_profile(
+                            profile_url=url,
+                            limit=profile_limit,
+                            create_folder=create_folders,
+                            convert_to_mp3=convert_to_mp3,
+                            skip_existing=True,
+                            progress_callback=lambda idx=index, total_count=total, **payload: self._report_profile_batch_progress(idx, total_count, payload),
+                            pause_check=lambda: False,
+                            stop_check=lambda: False,
+                        )
+                        if result.get("success"):
+                            success_count += 1
+                            downloaded = result.get("downloaded", 0)
+                            failed_items = result.get("failed", 0)
+                            base_msg = self.tr(
+                                "batch_profile_success",
+                                "{prefix} Profile done: {downloaded} downloaded",
+                            ).format(prefix=prefix, downloaded=downloaded)
+                            if failed_items:
+                                warn_msg = base_msg + " " + self.tr(
+                                    "batch_profile_partial",
+                                    "({failed} failed)",
+                                ).format(failed=failed_items)
+                                report("show_warning", warn_msg)
+                            else:
+                                report("show_success", base_msg)
+                        else:
+                            failures.append({"url": url, "error": result.get("error", "Unknown error")})
+                            report("show_error", f"{prefix} {self.tr('batch_profile_failed', 'Profile download failed.')}")
+                    except Exception as exc:  # capture scraper exceptions
+                        failures.append({"url": url, "error": str(exc)})
+                        report("show_error", f"{prefix} {self.tr('batch_profile_failed', 'Profile download failed.')}")
                 else:
-                    failures.append(
-                        {
-                            "url": link,
-                            "error": result.get("error", "Unknown error"),
-                        }
-                    )
+                    try:
+                        result = self.downloader.download_video(
+                            url,
+                            convert_to_mp3=convert_to_mp3,
+                            source="batch",
+                        )
+                        if result.get("success"):
+                            success_count += 1
+                            title = result.get("title", "")[:50]
+                            report(
+                                "show_success",
+                                f"{prefix} "
+                                + self.tr("batch_video_success", "Video downloaded: {title}").format(title=title),
+                            )
+                        else:
+                            failures.append({"url": url, "error": result.get("error", "Unknown error")})
+                            report(
+                                "show_error",
+                                f"{prefix} "
+                                + self.tr("batch_video_failed", "Video failed: {error}").format(
+                                    error=str(result.get("error", "Unknown error"))[:60]
+                                ),
+                            )
+                    except Exception as exc:
+                        failures.append({"url": url, "error": str(exc)})
+                        report(
+                            "show_error",
+                            f"{prefix} "
+                            + self.tr("batch_video_failed", "Video failed: {error}").format(error=str(exc)[:60]),
+                        )
         except Exception as exc:  # Catch unexpected errors to restore UI properly
             failures.append({"url": "unexpected", "error": str(exc)})
 
         self.root.after(
             0,
             self._on_batch_download_complete,
-            links,
+            tasks,
             success_count,
             failures,
             ignored_links,
+            duplicate_links,
         )
 
-    def _on_batch_download_complete(self, links, success_count, failures, ignored_links):
+    def _report_profile_batch_progress(self, index, total, payload):
+        """Route profile progress updates to the inline status widget."""
+        message = payload.get("message")
+        current = payload.get("current")
+        total_videos = payload.get("total")
+        video_name = payload.get("video_name") or ""
+        status = payload.get("status")
+
+        if not message and current and total_videos:
+            message = self.tr(
+                "batch_profile_video_progress",
+                "Downloading {current}/{total}: {video}",
+            ).format(current=current, total=total_videos, video=video_name[:40])
+
+        if not message:
+            message = self.tr("batch_profile_processing", "Processing profile downloads...")
+
+        prefix = self.tr("batch_progress_prefix", "[{index}/{total}]").format(index=index, total=total)
+
+        def update():
+            text = f"{prefix} {message}"
+            if status == "success":
+                self.download_status.show_success(text)
+            elif status in {"failed", "error"}:
+                method = self.download_status.show_warning if status == "failed" else self.download_status.show_error
+                method(text)
+            else:
+                self.download_status.show_info(text)
+
+        self.root.after(0, update)
+
+    def _on_batch_download_complete(self, tasks, success_count, failures, ignored_links, duplicate_links):
         """Handle UI updates after batch download finishes."""
-        total = len(links)
+        total = len(tasks)
         failed_count = len(failures)
         ignored_count = len(ignored_links)
+        duplicate_count = len(duplicate_links)
 
         # Log detailed errors for debugging
         if failures:
@@ -463,6 +608,12 @@ class MainWindow:
                 "{invalid} ignored.",
             ).format(invalid=ignored_count)
 
+        if duplicate_count:
+            summary += " " + self.tr(
+                "batch_complete_duplicates",
+                "{duplicates} duplicates skipped.",
+            ).format(duplicates=duplicate_count)
+
         # Show short status without detailed error messages
         if success_count == total and failed_count == 0:
             self.download_status.show_success(summary)
@@ -479,29 +630,33 @@ class MainWindow:
         self.url_entry.config(state="normal")
         self.url_entry.delete(0, tk.END)
         self.url_validation_label.config(text="")
+        self._batch_user_requested = False
 
     def _start_batch_download(self):
         """Initialize batch download after user confirmation."""
-        if not self.pending_batch_links:
+        if not self.pending_batch_tasks or not self._batch_user_requested:
             return
 
-        links = list(self.pending_batch_links)
+        tasks = list(self.pending_batch_tasks)
         ignored = list(self.pending_batch_ignored)
-        self.pending_batch_links = []
+        duplicates = list(self.pending_batch_duplicates)
+        self.pending_batch_tasks = []
         self.pending_batch_ignored = []
+        self.pending_batch_duplicates = []
+        self._batch_user_requested = False
 
         limit = self._safe_int(self.config.get_setting("profile_video_limit", 0))
         limit_notice = ""
         if limit > 0:
-            links, skipped_due_to_limit = self._apply_profile_limit(links, limit)
+            tasks, skipped_due_to_limit = self._apply_profile_limit(tasks, limit)
             if skipped_due_to_limit:
-                ignored.extend(skipped_due_to_limit)
+                ignored.extend(task["url"] for task in skipped_due_to_limit)
                 limit_notice = self.tr(
                     "batch_limit_notice",
                     "Respecting limit of {limit} per profile. Skipping {skipped} extra entries.",
                 ).format(limit=limit, skipped=len(skipped_due_to_limit))
 
-        if not links:
+        if not tasks:
             ignored_count = len(ignored)
             if ignored_count:
                 self.download_status.show_warning(
@@ -525,14 +680,14 @@ class MainWindow:
         start_message = self.tr(
             "batch_start_message",
             "Starting batch download ({count} links)...",
-        ).format(count=len(links))
+        ).format(count=len(tasks))
         if limit_notice:
             start_message += " " + limit_notice
         self.download_status.show_info(start_message)
 
         thread = threading.Thread(
             target=self._batch_download_thread,
-            args=(links, ignored),
+            args=(tasks, ignored, duplicates),
             daemon=True,
         )
         thread.start()
@@ -543,18 +698,21 @@ class MainWindow:
         except (TypeError, ValueError):
             return 0
 
-    def _apply_profile_limit(self, links, limit):
+    def _apply_profile_limit(self, tasks, limit):
         counts = {}
         kept = []
         skipped = []
-        for link in links:
-            profile = self._extract_profile_handle(link) or "__unknown__"
+        for task in tasks:
+            if task.get("type") != "video":
+                kept.append(task)
+                continue
+            profile = self._extract_profile_handle(task.get("url")) or "__unknown__"
             current = counts.get(profile, 0)
             if current >= limit:
-                skipped.append(link)
+                skipped.append(task)
                 continue
             counts[profile] = current + 1
-            kept.append(link)
+            kept.append(task)
         return kept, skipped
 
     def _extract_profile_handle(self, url):
@@ -567,9 +725,11 @@ class MainWindow:
 
     def validate_url(self, event=None):
         """Validate URL in real-time and detect type"""
-        if event is not None and self.pending_batch_links:
-            self.pending_batch_links = []
+        if event is not None and self.pending_batch_tasks:
+            self.pending_batch_tasks = []
             self.pending_batch_ignored = []
+            self.pending_batch_duplicates = []
+            self._batch_user_requested = False
             self.download_status.show_info(
                 self.tr("batch_cancelled_message", "Batch import cleared. Ready for single download."),
             )
@@ -624,7 +784,8 @@ class MainWindow:
             )
             return
 
-        if self.pending_batch_links:
+        if self.pending_batch_tasks:
+            self._batch_user_requested = True
             self._start_batch_download()
             return
 
@@ -745,21 +906,38 @@ class MainWindow:
             )
             self.root.after(0, self._reset_ui)
     
-    def download_progress_callback(self, current, total, video_name):
-        """Update progress for profile downloads"""
+    def download_progress_callback(self, *args, **kwargs):
+        """Update progress for profile downloads from scraper callbacks."""
         if self.should_stop:
             return
-        
-        # Wait while paused
+
+        # Normalise values so both legacy positional calls and newer keyword calls work.
+        message = kwargs.get("message")
+        current = kwargs.get("current")
+        total = kwargs.get("total")
+        video_name = kwargs.get("video_name")
+
+        if not kwargs:
+            current = args[0] if len(args) > 0 else current
+            total = args[1] if len(args) > 1 else total
+            video_name = args[2] if len(args) > 2 else video_name
+
+        if video_name is None:
+            video_name = ""
+
+        # Wait while paused, keeping UI responsive.
         while self.is_paused and not self.should_stop:
             self.root.update()
             self.root.after(100)
-        
-        # Update progress label
-        progress_text = self.tr(
-            "profile_progress_text",
-            "Downloading {current}/{total}: {video}...",
-        ).format(current=current, total=total, video=video_name[:40])
+
+        if message:
+            progress_text = message
+        else:
+            progress_text = self.tr(
+                "profile_progress_text",
+                "Downloading {current}/{total}: {video}...",
+            ).format(current=current or 0, total=total or 0, video=video_name[:40])
+
         self.root.after(0, self.progress_label.config, {"text": progress_text})
     
     def _on_profile_download_complete(self, result):

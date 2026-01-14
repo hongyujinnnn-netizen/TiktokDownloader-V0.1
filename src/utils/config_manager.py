@@ -4,8 +4,8 @@ Handle application settings and history
 """
 
 import json
-from pathlib import Path
 from datetime import datetime
+import threading
 import sys
 import os
 
@@ -15,29 +15,80 @@ from config import SETTINGS_FILE, HISTORY_FILE, DEFAULT_SETTINGS
 
 class ConfigManager:
     """Manage application configuration"""
-    
+
+    _settings_cache = None
+    _settings_mtime = None
+    _cache_lock = threading.RLock()
+
     def __init__(self):
         self.settings_file = SETTINGS_FILE
         self.history_file = HISTORY_FILE
         self._load_settings()
     
     def _load_settings(self):
-        """Load settings from file"""
-        if self.settings_file.exists():
-            try:
-                with open(self.settings_file, 'r', encoding='utf-8') as f:
-                    self.settings = json.load(f)
-            except:
-                self.settings = DEFAULT_SETTINGS.copy()
-        else:
-            self.settings = DEFAULT_SETTINGS.copy()
-            self._save_settings()
+        """Load settings from file and share cache across instances."""
+        with ConfigManager._cache_lock:
+            if ConfigManager._settings_cache is None:
+                should_persist = False
+                if self.settings_file.exists():
+                    try:
+                        with open(self.settings_file, 'r', encoding='utf-8') as f:
+                            loaded = json.load(f)
+                        if not isinstance(loaded, dict):
+                            raise ValueError("Settings file root must be a JSON object")
+                    except Exception:
+                        loaded = DEFAULT_SETTINGS.copy()
+                        should_persist = True
+                else:
+                    loaded = DEFAULT_SETTINGS.copy()
+                    should_persist = True
+
+                ConfigManager._settings_cache = loaded
+                self.settings = ConfigManager._settings_cache
+
+                if self.settings_file.exists():
+                    try:
+                        ConfigManager._settings_mtime = self.settings_file.stat().st_mtime
+                    except OSError:
+                        ConfigManager._settings_mtime = None
+                else:
+                    ConfigManager._settings_mtime = None
+
+                if should_persist:
+                    self._save_settings()
+            else:
+                latest_mtime = None
+                if self.settings_file.exists():
+                    try:
+                        latest_mtime = self.settings_file.stat().st_mtime
+                    except OSError:
+                        latest_mtime = None
+
+                if (
+                    latest_mtime is not None
+                    and (ConfigManager._settings_mtime is None or latest_mtime > ConfigManager._settings_mtime)
+                ):
+                    try:
+                        with open(self.settings_file, 'r', encoding='utf-8') as f:
+                            loaded = json.load(f)
+                        if isinstance(loaded, dict):
+                            ConfigManager._settings_cache.clear()
+                            ConfigManager._settings_cache.update(loaded)
+                            ConfigManager._settings_mtime = latest_mtime
+                    except Exception:
+                        pass
+
+                self.settings = ConfigManager._settings_cache
     
     def _save_settings(self):
         """Save settings to file"""
         try:
             with open(self.settings_file, 'w', encoding='utf-8') as f:
                 json.dump(self.settings, f, indent=4)
+            try:
+                ConfigManager._settings_mtime = self.settings_file.stat().st_mtime
+            except OSError:
+                ConfigManager._settings_mtime = None
         except Exception as e:
             print(f"Error saving settings: {e}")
     
@@ -52,7 +103,8 @@ class ConfigManager:
         Returns:
             Setting value
         """
-        return self.settings.get(key, default)
+        with ConfigManager._cache_lock:
+            return self.settings.get(key, default)
     
     def set_setting(self, key, value):
         """
@@ -62,8 +114,9 @@ class ConfigManager:
             key: Setting key
             value: Setting value
         """
-        self.settings[key] = value
-        self._save_settings()
+        with ConfigManager._cache_lock:
+            self.settings[key] = value
+            self._save_settings()
     
     def update_settings(self, settings_dict):
         """
@@ -72,13 +125,16 @@ class ConfigManager:
         Args:
             settings_dict: Dictionary of settings to update
         """
-        self.settings.update(settings_dict)
-        self._save_settings()
+        with ConfigManager._cache_lock:
+            self.settings.update(settings_dict)
+            self._save_settings()
     
     def reset_settings(self):
         """Reset settings to default"""
-        self.settings = DEFAULT_SETTINGS.copy()
-        self._save_settings()
+        with ConfigManager._cache_lock:
+            self.settings.clear()
+            self.settings.update(DEFAULT_SETTINGS)
+            self._save_settings()
     
     def add_to_history(self, item):
         """
@@ -155,6 +211,9 @@ class ConfigManager:
         try:
             with open(import_path, 'r', encoding='utf-8') as f:
                 imported = json.load(f)
+            if not isinstance(imported, dict):
+                return False
+            with ConfigManager._cache_lock:
                 self.settings.update(imported)
                 self._save_settings()
             return True
