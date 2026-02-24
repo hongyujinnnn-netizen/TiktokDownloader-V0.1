@@ -260,7 +260,7 @@ class SettingsWindow:
         self.window = tk.Toplevel(parent)
         self.tr = translate
         self.window.title(self.tr("settings_window_name", "Settings"))
-        self.window.geometry("950x600")
+        self.window.geometry("1024x680")
         self.window.configure(bg=COLORS["background"])
         self.window.minsize(820, 560)
 
@@ -322,6 +322,8 @@ class SettingsWindow:
             group.refresh_theme()
         for updater in self.theme_preview_widgets:
             updater()
+        if hasattr(self, "tab_buttons"):
+            self._sync_tab_toolbar()
 
         if hasattr(self, "ttk_style"):
             self.ttk_style.configure("Custom.TNotebook", background=COLORS["card"])
@@ -349,6 +351,17 @@ class SettingsWindow:
             self.save_button.config(state=state)
         if hasattr(self, "reset_button"):
             self.reset_button.config(state="normal")
+        if hasattr(self, "save_state_label"):
+            if self.dirty:
+                self.save_state_label.config(
+                    text=self.tr("settings_unsaved_state", "Unsaved changes"),
+                    fg=COLORS["warning"],
+                )
+            else:
+                self.save_state_label.config(
+                    text=self.tr("settings_saved_state", "All changes saved"),
+                    fg=COLORS["success"],
+                )
 
     def create_widgets(self):
         """Create UI widgets."""
@@ -378,37 +391,75 @@ class SettingsWindow:
         self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)
         self._mousewheel_bound = True
 
-        header = tk.Frame(self.scrollable_frame, bg=COLORS["background"])
-        self.register_themable(header, bg="background")
-        header.pack(pady=(16, 8), padx=24, fill="x")
+        hero_card = create_styled_frame(self.scrollable_frame, COLORS["card"])
+        self.register_themable(hero_card, bg="card", highlightbackground="border")
+        hero_card.configure(highlightbackground=COLORS["border"], highlightthickness=1, bd=0)
+        hero_card.pack(pady=(18, 12), padx=24, fill="x")
+
+        accent_bar = tk.Frame(hero_card, bg=COLORS["accent"], height=4)
+        self.register_themable(accent_bar, bg="accent")
+        accent_bar.pack(fill="x")
+
+        header = tk.Frame(hero_card, bg=COLORS["card"])
+        self.register_themable(header, bg="card")
+        header.pack(padx=20, pady=(16, 14), fill="x")
 
         title = tk.Label(
             header,
-            text=self.tr("settings_window_header", "⚙ Settings"),
+            text=self.tr("settings_window_header", "Control Center"),
             font=FONTS["title"],
-            bg=COLORS["background"],
+            bg=COLORS["card"],
             fg=COLORS["text"],
         )
-        self.register_themable(title, bg="background", fg="text")
+        self.register_themable(title, bg="card", fg="text")
         title.pack(anchor="w")
 
         subtitle = tk.Label(
             header,
             text=self.tr(
                 "settings_window_subtitle",
-                "Adjust the experience with instant theme previews and smarter controls.",
+                "Tune appearance, downloads, and updates with live previews.",
             ),
             font=FONTS["body"],
-            bg=COLORS["background"],
+            bg=COLORS["card"],
             fg=COLORS["text_secondary"],
-            wraplength=580,
+            wraplength=700,
             justify="left",
         )
-        self.register_themable(subtitle, bg="background", fg="text_secondary")
-        subtitle.pack(anchor="w", pady=(6, 0))
+        self.register_themable(subtitle, bg="card", fg="text_secondary")
+        subtitle.pack(anchor="w", pady=(6, 12))
 
-        separator = ttk.Separator(self.scrollable_frame, orient="horizontal", style="Settings.TSeparator")
-        separator.pack(fill="x", padx=24, pady=(0, 12))
+        chips = tk.Frame(header, bg=COLORS["card"])
+        self.register_themable(chips, bg="card")
+        chips.pack(fill="x")
+
+        app_chip = tk.Label(
+            chips,
+            text=f"{APP_NAME} v{APP_VERSION}",
+            font=FONTS["small"],
+            bg=COLORS["background"],
+            fg=COLORS["text_secondary"],
+            highlightbackground=COLORS["border"],
+            highlightthickness=1,
+            padx=10,
+            pady=4,
+        )
+        self.register_themable(app_chip, bg="background", fg="text_secondary", highlightbackground="border")
+        app_chip.pack(side="left")
+
+        shortcut_chip = tk.Label(
+            chips,
+            text=self.tr("settings_shortcut_hint", "Shortcut: Ctrl+S to save"),
+            font=FONTS["small"],
+            bg=COLORS["background"],
+            fg=COLORS["text_secondary"],
+            highlightbackground=COLORS["border"],
+            highlightthickness=1,
+            padx=10,
+            pady=4,
+        )
+        self.register_themable(shortcut_chip, bg="background", fg="text_secondary", highlightbackground="border")
+        shortcut_chip.pack(side="left", padx=(8, 0))
 
         self.card = create_styled_frame(self.scrollable_frame, COLORS["card"])
         self.register_themable(self.card, bg="card", highlightbackground="border")
@@ -421,53 +472,87 @@ class SettingsWindow:
             "Custom.TNotebook",
             background=COLORS["card"],
             borderwidth=0,
-            padding=(0, 4, 0, 0),
+            padding=0,
+        )
+
+        # Remove native tab element layout completely.
+        style.layout("Custom.TNotebook.Tab", [])
+
+        # Keep only the notebook client area.
+        style.layout(
+            "Custom.TNotebook",
+            [("Custom.TNotebook.client", {"sticky": "nswe"})],
         )
         style.configure(
             "Custom.TNotebook.Tab",
             background=COLORS["background"],
             foreground=COLORS["text"],
-            padding=[16, 9],
-            font=FONTS["body"],
+            padding=[14, 8],
+            font=FONTS["small"],
         )
         style.map(
             "Custom.TNotebook.Tab",
             background=[("selected", COLORS["accent"])],
             foreground=[("selected", COLORS["background"])],
-            padding=[("selected", [16, 9])],
+            padding=[("selected", [14, 8])],
         )
         style.configure("Settings.TSeparator", background=COLORS["border"])
         self.ttk_style = style
 
+        tab_toolbar = tk.Frame(self.card, bg=COLORS["card"])
+        self.register_themable(tab_toolbar, bg="card")
+        tab_toolbar.grid(row=0, column=0, sticky="ew", padx=18, pady=(16, 6))
+
+        self.tab_quick_nav = tk.Frame(tab_toolbar, bg=COLORS["card"])
+        self.register_themable(self.tab_quick_nav, bg="card")
+        self.tab_quick_nav.grid(row=0, column=0, sticky="w")
+
         self.notebook = ttk.Notebook(self.card, style="Custom.TNotebook")
-        self.notebook.grid(row=0, column=0, sticky="nsew", padx=18, pady=(18, 10))
-        self.card.rowconfigure(0, weight=1)
+        self.notebook.grid(row=1, column=0, sticky="nsew", padx=18, pady=(2, 10))
+        self.card.rowconfigure(1, weight=1)
 
         self.create_general_tab()
         self.create_download_tab()
         self.create_advanced_tab()
         self.create_updates_tab()
 
+        self._create_tab_toolbar()
+        self.notebook.bind("<<NotebookTabChanged>>", self._sync_tab_toolbar)
+
         self.notebook.update_idletasks()
 
         self.settings_status = InlineStatus(self.card)
-        self.settings_status.grid(row=1, column=0, sticky="ew", padx=18, pady=(0, 6))
+        self.settings_status.grid(row=2, column=0, sticky="ew", padx=18, pady=(0, 6))
 
         button_frame = tk.Frame(self.card, bg=COLORS["card"])
         self.register_themable(button_frame, bg="card")
-        button_frame.grid(row=2, column=0, sticky="ew", padx=18, pady=(0, 18))
+        button_frame.grid(row=3, column=0, sticky="ew", padx=18, pady=(0, 18))
         button_frame.columnconfigure(0, weight=1)
-        button_frame.columnconfigure(3, weight=1)
+        button_frame.columnconfigure(2, weight=1)
+
+        self.save_state_label = tk.Label(
+            button_frame,
+            text="",
+            font=FONTS["small"],
+            bg=COLORS["card"],
+            fg=COLORS["success"],
+        )
+        self.register_themable(self.save_state_label, bg="card")
+        self.save_state_label.grid(row=0, column=0, sticky="w", padx=(0, 10))
+
+        actions = tk.Frame(button_frame, bg=COLORS["card"])
+        self.register_themable(actions, bg="card")
+        actions.grid(row=0, column=2, sticky="e")
 
         self.save_button = create_styled_button(
-            button_frame,
-            text=self.tr("settings_save_button", "💾 Save Settings"),
+            actions,
+            text=self.tr("settings_save_button", "Save"),
             command=self.save_settings,
             bg=COLORS["button"],
             hover_bg=COLORS["button_hover"],
             fg=COLORS["button_contrast"],
         )
-        self.save_button.grid(row=0, column=0, sticky="w", padx=(0, 8), ipadx=18, ipady=7)
+        self.save_button.grid(row=0, column=0, padx=(0, 8), ipadx=14, ipady=7)
         self.register_themable(
             self.save_button,
             bg="button",
@@ -477,14 +562,14 @@ class SettingsWindow:
         )
 
         self.reset_button = create_styled_button(
-            button_frame,
-            text=self.tr("settings_reset_button", "↩ Reset to Defaults"),
+            actions,
+            text=self.tr("settings_reset_button", "Reset"),
             command=self.reset_to_defaults,
             bg=COLORS.get("secondary", COLORS["accent"]),
             hover_bg=COLORS.get("secondary_hover", "#7C3AED"),
             fg=COLORS["button_contrast"],
         )
-        self.reset_button.grid(row=0, column=1, padx=8, ipadx=18, ipady=7)
+        self.reset_button.grid(row=0, column=1, padx=8, ipadx=14, ipady=7)
         self.register_themable(
             self.reset_button,
             bg="secondary",
@@ -494,14 +579,14 @@ class SettingsWindow:
         )
 
         self.restart_button = create_styled_button(
-            button_frame,
-            text=self.tr("settings_restart_button", "🔁 Restart App"),
+            actions,
+            text=self.tr("settings_restart_button", "Restart"),
             command=self.restart_application,
             bg=COLORS["accent"],
             hover_bg="#0D94D8",
             fg=COLORS["button_contrast"],
         )
-        self.restart_button.grid(row=0, column=2, padx=8, ipadx=18, ipady=7)
+        self.restart_button.grid(row=0, column=2, padx=8, ipadx=14, ipady=7)
         self.register_themable(
             self.restart_button,
             bg="accent",
@@ -511,14 +596,14 @@ class SettingsWindow:
         )
 
         cancel_button = create_styled_button(
-            button_frame,
-            text=self.tr("settings_cancel_button", "✖ Cancel"),
+            actions,
+            text=self.tr("settings_cancel_button", "Cancel"),
             command=self.cancel_changes,
             bg=COLORS["danger"],
             hover_bg=COLORS.get("danger_hover", "#B91C1C"),
             fg=COLORS["button_contrast"],
         )
-        cancel_button.grid(row=0, column=3, sticky="e", ipadx=18, ipady=7)
+        cancel_button.grid(row=0, column=3, padx=(8, 0), ipadx=14, ipady=7)
         self.register_themable(
             cancel_button,
             bg="danger",
@@ -528,6 +613,65 @@ class SettingsWindow:
         )
 
         self.update_save_state()
+
+    def _create_tab_toolbar(self):
+        self.tab_buttons = {}
+        items = [
+            ("general", self.tr("settings_tab_general", "General")),
+            ("download", self.tr("settings_tab_download", "Download")),
+            ("advanced", self.tr("settings_tab_advanced", "Advanced")),
+            ("updates", self.tr("settings_tab_updates", "Updates")),
+        ]
+        for idx, (_key, label) in enumerate(items):
+            button = tk.Button(
+                self.tab_quick_nav,
+                text=label,
+                command=lambda i=idx: self._switch_settings_tab(i),
+                font=FONTS["small"],
+                bg=COLORS["background"],
+                fg=COLORS["text_secondary"],
+                activebackground=COLORS["accent"],
+                activeforeground=COLORS["background"],
+                relief="flat",
+                bd=0,
+                cursor="hand2",
+                padx=12,
+                pady=5,
+            )
+            button.grid(row=0, column=idx, padx=(0 if idx == 0 else 6, 0))
+            self.register_themable(
+                button,
+                bg="background",
+                fg="text_secondary",
+                activebackground="accent",
+                activeforeground="background",
+            )
+            self.tab_buttons[idx] = button
+        self._sync_tab_toolbar()
+
+    def _switch_settings_tab(self, index):
+        self.notebook.select(index)
+        self._sync_tab_toolbar()
+
+    def _sync_tab_toolbar(self, _event=None):
+        if not getattr(self, "tab_buttons", None):
+            return
+        current = self.notebook.index(self.notebook.select())
+        for idx, button in self.tab_buttons.items():
+            if idx == current:
+                button.configure(
+                    bg=COLORS["accent"],
+                    fg=COLORS["background"],
+                    activebackground=COLORS["accent"],
+                    activeforeground=COLORS["background"],
+                )
+            else:
+                button.configure(
+                    bg=COLORS["background"],
+                    fg=COLORS["text_secondary"],
+                    activebackground=COLORS["accent"],
+                    activeforeground=COLORS["background"],
+                )
 
     def _on_mousewheel(self, event):
         if not getattr(self, "canvas", None):
@@ -624,13 +768,13 @@ class SettingsWindow:
         """Create General settings tab."""
         general_frame = tk.Frame(self.notebook, bg=COLORS["card"])
         self.register_themable(general_frame, bg="card")
-        self.notebook.add(general_frame, text=self.tr("settings_tab_general", "⚙ General"))
+        self.notebook.add(general_frame, text=self.tr("settings_tab_general", "General"))
         general_frame.grid_columnconfigure(0, weight=1)
 
         info_section = self.create_setting_section(
             general_frame,
             title=self.tr("settings_overview_title", "Application Overview"),
-            icon="⚙",
+            icon=None,
             description=self.tr("settings_overview_description", "Review version details and language at a glance."),
         )
 
@@ -648,7 +792,7 @@ class SettingsWindow:
         language_section = self.create_setting_section(
             general_frame,
             title=self.tr("settings_language_title", "Language"),
-            icon="🗣",
+            icon=None,
             description=self.tr("settings_language_description", "Choose the interface language."),
         )
 
@@ -673,7 +817,7 @@ class SettingsWindow:
         theme_section = self.create_setting_section(
             general_frame,
             title=self.tr("settings_theme_title", "Appearance"),
-            icon="🎨",
+            icon=None,
             description=self.tr(
                 "settings_theme_description",
                 "Preview light or dark mode instantly before committing.",
@@ -687,7 +831,7 @@ class SettingsWindow:
                 {
                     "value": "light",
                     "label": self.tr("theme_option_light_label", "Light"),
-                    "icon": "🌞",
+                    "icon": None,
                     "description": self.tr(
                         "theme_option_light_description",
                         "Balanced contrast for bright rooms.",
@@ -696,7 +840,7 @@ class SettingsWindow:
                 {
                     "value": "dark",
                     "label": self.tr("theme_option_dark_label", "Dark"),
-                    "icon": "🌙",
+                    "icon": None,
                     "description": self.tr(
                         "theme_option_dark_description",
                         "Dim palette for low-light sessions.",
@@ -784,13 +928,13 @@ class SettingsWindow:
         """Create Download settings tab."""
         download_frame = tk.Frame(self.notebook, bg=COLORS["card"])
         self.register_themable(download_frame, bg="card")
-        self.notebook.add(download_frame, text=self.tr("settings_tab_download", "📥 Download"))
+        self.notebook.add(download_frame, text=self.tr("settings_tab_download", "Download"))
         download_frame.grid_columnconfigure(0, weight=1)
 
         path_section = self.create_setting_section(
             download_frame,
             title=self.tr("settings_download_location_title", "Download Location"),
-            icon="📂",
+            icon=None,
             description=self.tr(
                 "settings_download_location_description",
                 "Decide where finished downloads are stored on your device.",
@@ -807,7 +951,7 @@ class SettingsWindow:
 
         browse_btn = create_styled_button(
             path_input_frame,
-            text=self.tr("settings_browse_button", "📁 Browse"),
+            text=self.tr("settings_browse_button", "Browse"),
             command=self.browse_folder,
             bg=COLORS["accent"],
             hover_bg="#0EA5E9",
@@ -837,7 +981,7 @@ class SettingsWindow:
         quality_section = self.create_setting_section(
             download_frame,
             title=self.tr("settings_quality_title", "Video Quality"),
-            icon="🎞",
+            icon=None,
             description=self.tr(
                 "settings_quality_description",
                 "Select your preferred quality. The best available option is used when possible.",
@@ -851,7 +995,7 @@ class SettingsWindow:
                 {
                     "value": "best",
                     "label": self.tr("quality_option_best_label", "Best"),
-                    "icon": "⭐",
+                    "icon": None,
                     "description": self.tr(
                         "quality_option_best_description",
                         "Always grab the highest resolution.",
@@ -860,7 +1004,7 @@ class SettingsWindow:
                 {
                     "value": "high",
                     "label": self.tr("quality_option_high_label", "High"),
-                    "icon": "📺",
+                    "icon": None,
                     "description": self.tr(
                         "quality_option_high_description",
                         "Great balance of size and quality.",
@@ -869,7 +1013,7 @@ class SettingsWindow:
                 {
                     "value": "medium",
                     "label": self.tr("quality_option_medium_label", "Medium"),
-                    "icon": "📱",
+                    "icon": None,
                     "description": self.tr(
                         "quality_option_medium_description",
                         "Optimised for smaller devices.",
@@ -878,7 +1022,7 @@ class SettingsWindow:
                 {
                     "value": "low",
                     "label": self.tr("quality_option_low_label", "Low"),
-                    "icon": "🚀",
+                    "icon": None,
                     "description": self.tr(
                         "quality_option_low_description",
                         "Fast downloads, smallest files.",
@@ -901,7 +1045,7 @@ class SettingsWindow:
         audio_section = self.create_setting_section(
             download_frame,
             title=self.tr("settings_audio_title", "Audio Conversion"),
-            icon="🎧",
+            icon=None,
             description=self.tr(
                 "settings_audio_description",
                 "Automatically convert videos to MP3 after download.",
@@ -928,7 +1072,7 @@ class SettingsWindow:
         profile_section = self.create_setting_section(
             download_frame,
             title=self.tr("settings_profile_limit_title", "Profile Download Limit"),
-            icon="👤",
+            icon=None,
             description=self.tr(
                 "settings_profile_limit_description",
                 "Control how many videos are downloaded when grabbing an entire profile.",
@@ -972,13 +1116,13 @@ class SettingsWindow:
         """Create Advanced settings tab."""
         advanced_frame = tk.Frame(self.notebook, bg=COLORS["card"])
         self.register_themable(advanced_frame, bg="card")
-        self.notebook.add(advanced_frame, text=self.tr("settings_tab_advanced", "🔧 Advanced"))
+        self.notebook.add(advanced_frame, text=self.tr("settings_tab_advanced", "Advanced"))
         advanced_frame.grid_columnconfigure(0, weight=1)
 
         options_section = self.create_setting_section(
             advanced_frame,
             title=self.tr("settings_options_title", "Download Options"),
-            icon="🛠",
+            icon=None,
             description=self.tr(
                 "settings_options_description",
                 "Fine-tune how downloads are organised and logged.",
@@ -1030,13 +1174,13 @@ class SettingsWindow:
         """Create Updates tab."""
         updates_frame = tk.Frame(self.notebook, bg=COLORS["card"])
         self.register_themable(updates_frame, bg="card")
-        self.notebook.add(updates_frame, text=self.tr("settings_tab_updates", "🔄 Updates"))
+        self.notebook.add(updates_frame, text=self.tr("settings_tab_updates", "Updates"))
         updates_frame.grid_columnconfigure(0, weight=1)
 
         auto_section = self.create_setting_section(
             updates_frame,
             title=self.tr("settings_auto_updates_title", "Automatic Updates"),
-            icon="⚡",
+            icon=None,
             description=self.tr(
                 "settings_auto_updates_description",
                 "Keep yt-dlp up to date automatically each time the app starts.",
@@ -1063,7 +1207,7 @@ class SettingsWindow:
         manual_section = self.create_setting_section(
             updates_frame,
             title=self.tr("settings_manual_update_title", "Manual Update"),
-            icon="🔁",
+            icon=None,
             description=self.tr(
                 "settings_manual_update_description",
                 "Update yt-dlp immediately when you need the latest fixes.",
@@ -1088,7 +1232,7 @@ class SettingsWindow:
 
         self.update_button = create_styled_button(
             manual_section,
-            text=self.tr("settings_manual_update_button", "🔄 Update yt-dlp"),
+            text=self.tr("settings_manual_update_button", "Update yt-dlp"),
             command=self.manual_update,
             bg=COLORS["success"],
             hover_bg="#059669",
@@ -1123,7 +1267,7 @@ class SettingsWindow:
         """Create a styled section container with optional description."""
         wrapper = tk.Frame(parent, bg=COLORS["card"])
         self.register_themable(wrapper, bg="card")
-        wrapper.pack(pady=8, padx=10, fill="x")
+        wrapper.pack(pady=10, padx=10, fill="x")
 
         section = tk.Frame(
             wrapper,
@@ -1135,9 +1279,13 @@ class SettingsWindow:
         self.register_themable(section, bg="background", highlightbackground="border")
         section.pack(fill="x")
 
+        accent_line = tk.Frame(section, bg=COLORS["accent"], height=2)
+        self.register_themable(accent_line, bg="accent")
+        accent_line.pack(fill="x")
+
         header = tk.Frame(section, bg=COLORS["background"])
         self.register_themable(header, bg="background")
-        header.pack(fill="x", padx=14, pady=(14, 0))
+        header.pack(fill="x", padx=14, pady=(12, 0))
 
         title_text = f"{icon} {title}".strip() if icon else title
         title_label = tk.Label(
@@ -1157,7 +1305,7 @@ class SettingsWindow:
                 font=FONTS["small"],
                 bg=COLORS["background"],
                 fg=COLORS["text_secondary"],
-                wraplength=540,
+                wraplength=620,
                 justify="left",
             )
             self.register_themable(desc_label, bg="background", fg="text_secondary")
@@ -1433,7 +1581,7 @@ class SettingsWindow:
                 "message",
                 self.tr("settings_update_success_message", "yt-dlp updated successfully!"),
             )
-            self.update_status_label.config(text=f"✅ {message}", fg=COLORS["success"])
+            self.update_status_label.config(text=f"✓ {message}", fg=COLORS["success"])
             self.settings_status.show_success(message)
         else:
             message = result.get(
@@ -1441,5 +1589,6 @@ class SettingsWindow:
                 self.tr("settings_update_failure_message", "Update failed"),
             )
             trimmed = message[:120]
-            self.update_status_label.config(text=f"❌ {trimmed}", fg=COLORS["danger"])
+            self.update_status_label.config(text=f"✖ {trimmed}", fg=COLORS["danger"])
             self.settings_status.show_error(trimmed)
+

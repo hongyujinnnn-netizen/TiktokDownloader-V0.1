@@ -1,4 +1,4 @@
-"""
+﻿"""
 Main Application Window
 Professional TikTok Downloader GUI
 """
@@ -42,7 +42,6 @@ class MainWindow:
         self.should_stop = False
         self.is_downloading = False
         self.is_batch_downloading = False
-        self.import_button = None
         self.pending_batch_tasks = []
         self.pending_batch_ignored = []
         self.pending_batch_duplicates = []
@@ -122,7 +121,7 @@ class MainWindow:
         # Smart Download Section (2-in-1)
         single_label = tk.Label(
             main_card,
-            text=self.tr("smart_download_heading", "Smart Download (Video or Profile)"),
+            text=self.tr("smart_download_heading", "Smart Download (Profile)"),
             font=FONTS["heading"],
             bg=COLORS["card"],
             fg=COLORS["text"]
@@ -132,7 +131,7 @@ class MainWindow:
         # URL Entry
         url_label = tk.Label(
             main_card,
-            text=self.tr("paste_url_any", "Paste Video or Profile URL:"),
+            text=self.tr("paste_url_any", "Paste Profile URL:"),
             font=FONTS["body"],
             bg=COLORS["card"],
             fg=COLORS["text_secondary"]
@@ -146,26 +145,17 @@ class MainWindow:
         self.url_entry = create_styled_entry(url_frame, width=50)
         self.url_entry.pack(side="left", ipady=8, padx=(0, 10))
         self.url_entry.bind('<KeyRelease>', self.validate_url)
+        self._setup_drop_target(self.url_entry)
         
         paste_btn = create_styled_button(
             url_frame,
             text=self.tr("paste_button", "\U0001F4CB Paste"),
             command=self.paste_url,
-            bg=COLORS["accent"],
-            hover_bg="#0EA5E9",
+            bg="#FFFFFF",
+            hover_bg="#E2E8F0",
             font=FONTS["emoji"]
         )
         paste_btn.pack(side="left", ipadx=10, ipady=8)
-
-        self.import_button = create_styled_button(
-            url_frame,
-            text=self.tr("import_links_button", "📂 Import Links"),
-            command=self.import_links_from_file,
-            bg=COLORS["accent"],
-            hover_bg="#0EA5E9",
-            font=FONTS["emoji"]
-        )
-        self.import_button.pack(side="left", padx=(10, 0), ipadx=10, ipady=8)
         
         # URL validation feedback
         self.url_validation_label = tk.Label(
@@ -295,7 +285,7 @@ class MainWindow:
         
         footer_text = tk.Label(
             footer,
-            text=self.tr("footer_text", "Built with Ryu | v{version} | © 2026").format(version=APP_VERSION),
+            text=self.tr("footer_text", "Built with Ryu | v{version} | Â© 2026").format(version=APP_VERSION),
             font=FONTS["small"],
             bg=COLORS["background"],
             fg=COLORS["text_secondary"]
@@ -345,6 +335,13 @@ class MainWindow:
                 (self.tr("batch_file_dialog_filter_all", "All Files"), "*.*"),
             ],
         )
+        if not file_path:
+            return
+
+        self._import_links_from_path(file_path)
+
+    def _import_links_from_path(self, file_path):
+        """Load TikTok links from a text file into batch queue."""
         if not file_path:
             return
 
@@ -438,6 +435,54 @@ class MainWindow:
         if first_url:
             self.url_entry.insert(0, first_url)
         self.validate_url()
+
+    def _setup_drop_target(self, widget):
+        """Enable dropping .txt files onto a widget when DnD is available."""
+        if not hasattr(widget, "drop_target_register") or not hasattr(widget, "dnd_bind"):
+            return
+        try:
+            widget.drop_target_register("DND_Files")
+            widget.dnd_bind("<<Drop>>", self._on_drop_file)
+        except Exception as exc:
+            self.logger.warning(f"Failed to bind drag-and-drop: {exc}")
+
+    def _on_drop_file(self, event):
+        """Handle dropped file(s) and import first .txt file."""
+        if self.is_batch_downloading or self.is_downloading:
+            self.download_status.show_warning(
+                self.tr("batch_busy_warning", "Please wait for the current download to finish."),
+            )
+            return "break"
+
+        raw_data = getattr(event, "data", "") or ""
+        try:
+            dropped_paths = list(self.root.tk.splitlist(raw_data))
+        except Exception:
+            dropped_paths = [raw_data]
+
+        normalized_paths = []
+        for path in dropped_paths:
+            cleaned = str(path).strip().strip("{}").strip('"')
+            if cleaned:
+                normalized_paths.append(cleaned)
+
+        txt_files = [path for path in normalized_paths if path.lower().endswith(".txt")]
+        if not txt_files:
+            self.download_status.show_warning(
+                self.tr("drop_txt_only", "Please drop a .txt file that contains TikTok links."),
+            )
+            return "break"
+
+        if len(txt_files) > 1:
+            self.download_status.show_info(
+                self.tr(
+                    "drop_multi_files",
+                    "Multiple files dropped. Using the first .txt file: {name}",
+                ).format(name=os.path.basename(txt_files[0])),
+            )
+
+        self._import_links_from_path(txt_files[0])
+        return "break"
 
     def _batch_download_thread(self, tasks, ignored_links, duplicate_links):
         """Perform sequential downloads for imported links."""
@@ -623,8 +668,6 @@ class MainWindow:
             self.download_status.show_error(summary)
 
         self.download_btn.config(state="normal")
-        if hasattr(self, "import_button") and self.import_button:
-            self.import_button.config(state="normal")
 
         self.is_batch_downloading = False
         self.url_entry.config(state="normal")
@@ -673,8 +716,6 @@ class MainWindow:
 
         self.is_batch_downloading = True
         self.download_btn.config(state="disabled")
-        if self.import_button:
-            self.import_button.config(state="disabled")
         self.url_entry.config(state="disabled")
 
         start_message = self.tr(
@@ -1047,3 +1088,4 @@ class MainWindow:
             self.root.attributes('-fullscreen', False)
             return 'break'
         return None
+

@@ -81,9 +81,12 @@ FONTS = {
     "title_large": ("Segoe UI", 32, "bold"),
     "heading": ("Segoe UI", 16, "bold"),
     "subheading": ("Segoe UI", 14, "bold"),
+    "subheading_bold": ("Segoe UI", 14, "bold"),
     "body": ("Segoe UI", 11),
+    "body_bold": ("Segoe UI", 11, "bold"),
     "button": ("Segoe UI", 11, "bold"),
     "small": ("Segoe UI", 9),
+    "small_bold": ("Segoe UI", 9, "bold"),
     "emoji": ("Segoe UI Emoji", 11),
     "emoji_large": ("Segoe UI Emoji", 20),
 }

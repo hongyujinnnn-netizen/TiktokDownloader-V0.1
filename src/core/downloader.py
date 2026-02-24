@@ -62,6 +62,8 @@ class TikTokDownloader:
             
             # Configure yt-dlp options
             ydl_opts = YTDLP_OPTIONS.copy()
+            # Avoid exposing temporary .part files as final output.
+            ydl_opts['nopart'] = True
             
             if convert_to_mp3:
                 ydl_opts.update({
@@ -96,6 +98,7 @@ class TikTokDownloader:
 
                 if convert_to_mp3:
                     downloaded_file = downloaded_file.with_suffix('.mp3')
+                downloaded_file = self._resolve_downloaded_file(downloaded_file)
 
                 if create_folder and not profile_user:
                     resolved_user = (
@@ -163,6 +166,24 @@ class TikTokDownloader:
         if match:
             return match.group(1)
         return None
+
+    def _resolve_downloaded_file(self, expected_file: Path) -> Path:
+        """
+        Resolve yt-dlp output to a stable final path.
+        If a temporary .part file is left after a successful run, rename it.
+        """
+        if expected_file.exists():
+            return expected_file
+
+        part_file = expected_file.with_name(f"{expected_file.name}.part")
+        if part_file.exists():
+            try:
+                part_file.rename(expected_file)
+                return expected_file
+            except OSError:
+                return part_file
+
+        return expected_file
 
     def _extract_profile_from_path(self, path: Path) -> str | None:
         for part in reversed(path.parts):

@@ -29,15 +29,21 @@ def main():
         config = ConfigManager()
         
         # Apply language and theme from settings
-        language = config.get_setting("language", "en")
+        language = config.get_setting("language", "en") or "en"
         set_language(language)
 
         theme = config.get_setting("theme", "light")
         set_theme(theme)
         logger.info(f"Applied {theme} theme | language={language}")
         
-        # Create main window
-        root = tk.Tk()
+        # Create main window (prefer DnD-capable root when available)
+        try:
+            from tkinterdnd2 import TkinterDnD
+            root = TkinterDnD.Tk()
+            logger.info("Drag-and-drop support enabled")
+        except Exception:
+            root = tk.Tk()
+            logger.info("Drag-and-drop support unavailable; running without DnD")
         app = MainWindow(root)
         
         # Run application

@@ -98,6 +98,25 @@ def create_styled_entry(parent, width=40, **kwargs):
         width=width,
         **kwargs
     )
+
+    def on_focus_in(_event):
+        entry.configure(highlightbackground=COLORS["accent"], highlightcolor=COLORS["accent"])
+
+    def on_focus_out(_event):
+        entry.configure(highlightbackground=COLORS["border"], highlightcolor=COLORS["accent"])
+
+    def on_enter(_event):
+        entry.configure(bg=COLORS["card"])
+
+    def on_leave(_event):
+        if entry.focus_get() is not entry:
+            entry.configure(bg=COLORS["background"])
+
+    entry.bind("<FocusIn>", on_focus_in, add="+")
+    entry.bind("<FocusOut>", on_focus_out, add="+")
+    entry.bind("<Enter>", on_enter, add="+")
+    entry.bind("<Leave>", on_leave, add="+")
+
     return entry
 
 
