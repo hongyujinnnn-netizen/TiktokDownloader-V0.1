@@ -10,12 +10,12 @@ import os
 # Import configuration
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from config import APP_NAME, COLORS, set_theme
-from utils.translator import set_language
+from src.utils.translator import set_language
 
 # Import GUI
-from gui.main_window import MainWindow
-from utils.config_manager import ConfigManager
-from utils.logger import setup_logger
+from src.gui.main_window import MainWindow
+from src.utils.config_manager import ConfigManager
+from src.utils.logger import setup_logger
 
 
 def main():

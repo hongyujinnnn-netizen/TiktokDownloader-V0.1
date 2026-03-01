@@ -11,10 +11,10 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 from config import COLORS, FONTS
-from gui.styles import create_styled_button, create_styled_frame, create_styled_entry
-from gui.progress_dialog import InlineStatus
-from utils.config_manager import ConfigManager
-from utils.translator import translate
+from src.gui.styles import create_styled_button, create_styled_frame, create_styled_entry
+from src.gui.progress_dialog import InlineStatus
+from src.utils.config_manager import ConfigManager
+from src.utils.translator import translate
 
 
 class HistoryWindow:

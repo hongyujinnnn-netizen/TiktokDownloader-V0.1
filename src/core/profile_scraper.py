@@ -12,11 +12,11 @@ from typing import Any
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 from config import DOWNLOADS_DIR
-from core.downloader import TikTokDownloader
-from utils.validators import is_valid_tiktok_url
-from utils.config_manager import ConfigManager
-from utils.file_manager import FileManager
-from utils.logger import get_logger
+from src.core.downloader import TikTokDownloader
+from src.utils.validators import is_valid_tiktok_url
+from src.utils.config_manager import ConfigManager
+from src.utils.file_manager import FileManager
+from src.utils.logger import get_logger
 
 
 class ProfileScraper:

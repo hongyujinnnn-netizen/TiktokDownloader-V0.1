@@ -11,11 +11,11 @@ import threading
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 from config import COLORS, FONTS
-from gui.styles import create_styled_button, create_styled_entry, create_styled_frame
-from gui.progress_dialog import InlineStatus
-from core.profile_scraper import ProfileScraper
-from utils.config_manager import ConfigManager
-from utils.validators import is_valid_profile_url
+from src.gui.styles import create_styled_button, create_styled_entry, create_styled_frame
+from src.gui.progress_dialog import InlineStatus
+from src.core.profile_scraper import ProfileScraper
+from src.utils.config_manager import ConfigManager
+from src.utils.validators import is_valid_profile_url
 import pyperclip
 
 

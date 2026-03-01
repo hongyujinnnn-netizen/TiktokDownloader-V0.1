@@ -12,9 +12,9 @@ import re
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 from config import YTDLP_OPTIONS
-from utils.file_manager import FileManager
-from utils.validators import is_valid_tiktok_url
-from utils.config_manager import ConfigManager
+from src.utils.file_manager import FileManager
+from src.utils.validators import is_valid_tiktok_url
+from src.utils.config_manager import ConfigManager
 
 
 class TikTokDownloader:

@@ -20,11 +20,11 @@ from config import (
     LANGUAGES,
     set_theme,
 )
-from gui.styles import create_styled_button, create_styled_entry, create_styled_frame
-from gui.progress_dialog import InlineStatus
-from utils.config_manager import ConfigManager
-from utils.translator import translate
-from core.updater import YtdlpUpdater
+from src.gui.styles import create_styled_button, create_styled_entry, create_styled_frame
+from src.gui.progress_dialog import InlineStatus
+from src.utils.config_manager import ConfigManager
+from src.utils.translator import translate
+from src.core.updater import YtdlpUpdater
 
 
 class Tooltip:

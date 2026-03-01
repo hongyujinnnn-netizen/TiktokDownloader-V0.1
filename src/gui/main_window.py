@@ -11,17 +11,17 @@ import re
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 from config import APP_NAME, COLORS, FONTS, APP_VERSION
-from gui.styles import apply_styles, create_styled_button, create_styled_entry, create_styled_frame
-from gui.profile_downloader import ProfileDownloaderWindow
-from gui.history_window import HistoryWindow
-from gui.settings_window import SettingsWindow
-from gui.progress_dialog import ProgressDialog, InlineStatus
-from core.downloader import TikTokDownloader
-from core.profile_scraper import ProfileScraper
-from utils.config_manager import ConfigManager
-from utils.validators import is_valid_tiktok_url, is_valid_profile_url, is_valid_video_url
-from utils.translator import translate
-from utils.logger import get_logger
+from src.gui.styles import apply_styles, create_styled_button, create_styled_entry, create_styled_frame
+from src.gui.profile_downloader import ProfileDownloaderWindow
+from src.gui.history_window import HistoryWindow
+from src.gui.settings_window import SettingsWindow
+from src.gui.progress_dialog import ProgressDialog, InlineStatus
+from src.core.downloader import TikTokDownloader
+from src.core.profile_scraper import ProfileScraper
+from src.utils.config_manager import ConfigManager
+from src.utils.validators import is_valid_tiktok_url, is_valid_profile_url, is_valid_video_url
+from src.utils.translator import translate
+from src.utils.logger import get_logger
 import pyperclip
 import threading
 
