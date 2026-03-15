@@ -636,9 +636,9 @@ class SettingsWindow:
                 bd=0,
                 cursor="hand2",
                 padx=12,
-                pady=5,
+                pady=6,
             )
-            button.grid(row=0, column=idx, padx=(0 if idx == 0 else 6, 0))
+            button.grid(row=idx, column=0, sticky="ew", pady=(0 if idx == 0 else 4, 0))
             self.register_themable(
                 button,
                 bg="background",
