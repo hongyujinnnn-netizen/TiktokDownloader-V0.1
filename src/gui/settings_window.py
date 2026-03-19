@@ -95,13 +95,17 @@ class ToggleSwitch(tk.Frame):
 
     def __init__(self, parent, text="", variable=None, command=None):
         super().__init__(parent, bg=parent.cget("bg"))
+        # Slightly larger, more tappable track and knob
+        self._track_width = 52
+        self._track_height = 28
+        self._knob_size = 24
         self.variable = variable or tk.BooleanVar(value=False)
         self.command = command
 
         self.track = tk.Frame(
             self,
-            width=40,
-            height=20,
+            width=self._track_width,
+            height=self._track_height,
             bg=COLORS["border"],
             highlightthickness=0,
             bd=0,
@@ -111,8 +115,8 @@ class ToggleSwitch(tk.Frame):
 
         self.knob = tk.Frame(
             self.track,
-            width=18,
-            height=18,
+            width=self._knob_size,
+            height=self._knob_size,
             bg=COLORS["background"],
             highlightthickness=0,
             bd=0,
@@ -151,7 +155,8 @@ class ToggleSwitch(tk.Frame):
         track_color = COLORS["accent"] if active else COLORS["border"]
         self.track.configure(bg=track_color)
 
-        knob_x = 20 if active else 1
+        # Place knob based on configured sizes so it remains aligned
+        knob_x = self._track_width - self._knob_size - 2 if active else 1
         self.knob.configure(bg=COLORS["background"])
         self.knob.place_configure(x=knob_x)
 
@@ -241,16 +246,17 @@ class RadioCardGroup(tk.Frame):
         current = self.variable.get()
         for value, card in self.cards.items():
             selected = value == current
-            card_bg = COLORS["accent"] if selected else COLORS["background"]
+            # Use accent for border and text, keep background subtle for readability
+            card_bg = COLORS["background"]
             border_color = COLORS["accent"] if selected else COLORS["border"]
             card.configure(bg=card_bg, highlightbackground=border_color)
             for child in card.winfo_children():
                 child.configure(bg=card_bg)
                 metadata = self.widget_metadata.get(child, {})
                 if metadata.get("is_primary", False):
-                    child.configure(fg=COLORS["background"] if selected else COLORS["text"])
+                    child.configure(fg=COLORS["accent"] if selected else COLORS["text"])
                 else:
-                    child.configure(fg=COLORS["background"] if selected else COLORS["text_secondary"])
+                    child.configure(fg=COLORS["accent"] if selected else COLORS["text_secondary"])
 
 
 class SettingsWindow:
@@ -394,15 +400,12 @@ class SettingsWindow:
         hero_card = create_styled_frame(self.scrollable_frame, COLORS["card"])
         self.register_themable(hero_card, bg="card", highlightbackground="border")
         hero_card.configure(highlightbackground=COLORS["border"], highlightthickness=1, bd=0)
-        hero_card.pack(pady=(18, 12), padx=24, fill="x")
+        hero_card.pack(pady=(18, 8), padx=24, fill="x")
 
-        accent_bar = tk.Frame(hero_card, bg=COLORS["accent"], height=4)
-        self.register_themable(accent_bar, bg="accent")
-        accent_bar.pack(fill="x")
-
+        # Lighter-weight header without an additional accent bar and chips
         header = tk.Frame(hero_card, bg=COLORS["card"])
         self.register_themable(header, bg="card")
-        header.pack(padx=20, pady=(16, 14), fill="x")
+        header.pack(padx=20, pady=(12, 10), fill="x")
 
         title = tk.Label(
             header,
@@ -418,7 +421,7 @@ class SettingsWindow:
             header,
             text=self.tr(
                 "settings_window_subtitle",
-                "Tune appearance, downloads, and updates with live previews.",
+                "Tune appearance, downloads, and updates in one place.",
             ),
             font=FONTS["body"],
             bg=COLORS["card"],
@@ -429,37 +432,7 @@ class SettingsWindow:
         self.register_themable(subtitle, bg="card", fg="text_secondary")
         subtitle.pack(anchor="w", pady=(6, 12))
 
-        chips = tk.Frame(header, bg=COLORS["card"])
-        self.register_themable(chips, bg="card")
-        chips.pack(fill="x")
-
-        app_chip = tk.Label(
-            chips,
-            text=f"{APP_NAME} v{APP_VERSION}",
-            font=FONTS["small"],
-            bg=COLORS["background"],
-            fg=COLORS["text_secondary"],
-            highlightbackground=COLORS["border"],
-            highlightthickness=1,
-            padx=10,
-            pady=4,
-        )
-        self.register_themable(app_chip, bg="background", fg="text_secondary", highlightbackground="border")
-        app_chip.pack(side="left")
-
-        shortcut_chip = tk.Label(
-            chips,
-            text=self.tr("settings_shortcut_hint", "Shortcut: Ctrl+S to save"),
-            font=FONTS["small"],
-            bg=COLORS["background"],
-            fg=COLORS["text_secondary"],
-            highlightbackground=COLORS["border"],
-            highlightthickness=1,
-            padx=10,
-            pady=4,
-        )
-        self.register_themable(shortcut_chip, bg="background", fg="text_secondary", highlightbackground="border")
-        shortcut_chip.pack(side="left", padx=(8, 0))
+        # Keep the header simple; app/version details are shown inside General tab
 
         self.card = create_styled_frame(self.scrollable_frame, COLORS["card"])
         self.register_themable(self.card, bg="card", highlightbackground="border")
@@ -548,16 +521,16 @@ class SettingsWindow:
             actions,
             text=self.tr("settings_save_button", "Save"),
             command=self.save_settings,
-            bg=COLORS["button"],
-            hover_bg=COLORS["button_hover"],
+            bg=COLORS["accent"],
+            hover_bg="#0D94D8",
             fg=COLORS["button_contrast"],
         )
         self.save_button.grid(row=0, column=0, padx=(0, 8), ipadx=14, ipady=7)
         self.register_themable(
             self.save_button,
-            bg="button",
+            bg="accent",
             fg="button_contrast",
-            activebackground="button",
+            activebackground="accent",
             activeforeground="button_contrast",
         )
 
@@ -565,17 +538,17 @@ class SettingsWindow:
             actions,
             text=self.tr("settings_reset_button", "Reset"),
             command=self.reset_to_defaults,
-            bg=COLORS.get("secondary", COLORS["accent"]),
-            hover_bg=COLORS.get("secondary_hover", "#7C3AED"),
-            fg=COLORS["button_contrast"],
+            bg=COLORS["background"],
+            hover_bg=COLORS.get("secondary_hover", "#E5E7EB"),
+            fg=COLORS["text_secondary"],
         )
         self.reset_button.grid(row=0, column=1, padx=8, ipadx=14, ipady=7)
         self.register_themable(
             self.reset_button,
-            bg="secondary",
-            fg="button_contrast",
-            activebackground="secondary",
-            activeforeground="button_contrast",
+            bg="background",
+            fg="text_secondary",
+            activebackground="background",
+            activeforeground="text_secondary",
         )
 
         self.restart_button = create_styled_button(
@@ -599,17 +572,17 @@ class SettingsWindow:
             actions,
             text=self.tr("settings_cancel_button", "Cancel"),
             command=self.cancel_changes,
-            bg=COLORS["danger"],
-            hover_bg=COLORS.get("danger_hover", "#B91C1C"),
-            fg=COLORS["button_contrast"],
+            bg=COLORS["background"],
+            hover_bg=COLORS.get("danger_hover", "#FEE2E2"),
+            fg=COLORS["danger"],
         )
         cancel_button.grid(row=0, column=3, padx=(8, 0), ipadx=14, ipady=7)
         self.register_themable(
             cancel_button,
-            bg="danger",
-            fg="button_contrast",
-            activebackground="danger",
-            activeforeground="button_contrast",
+            bg="background",
+            fg="danger",
+            activebackground="background",
+            activeforeground="danger",
         )
 
         self.update_save_state()
@@ -618,7 +591,7 @@ class SettingsWindow:
         self.tab_buttons = {}
         items = [
             ("general", self.tr("settings_tab_general", "General")),
-            ("download", self.tr("settings_tab_download", "Download")),
+            ("download", self.tr("settings_tab_download", "Downloads")),
             ("advanced", self.tr("settings_tab_advanced", "Advanced")),
             ("updates", self.tr("settings_tab_updates", "Updates")),
         ]
@@ -638,7 +611,8 @@ class SettingsWindow:
                 padx=12,
                 pady=6,
             )
-            button.grid(row=idx, column=0, sticky="ew", pady=(0 if idx == 0 else 4, 0))
+            # Arrange as a horizontal pill-style tab row
+            button.grid(row=0, column=idx, sticky="w", padx=(0 if idx == 0 else 4, 0))
             self.register_themable(
                 button,
                 bg="background",
@@ -774,7 +748,7 @@ class SettingsWindow:
         info_section = self.create_setting_section(
             general_frame,
             title=self.tr("settings_overview_title", "Application Overview"),
-            icon=None,
+            icon="⚙",
             description=self.tr("settings_overview_description", "Review version details and language at a glance."),
         )
 
@@ -792,7 +766,7 @@ class SettingsWindow:
         language_section = self.create_setting_section(
             general_frame,
             title=self.tr("settings_language_title", "Language"),
-            icon=None,
+            icon="🌐",
             description=self.tr("settings_language_description", "Choose the interface language."),
         )
 
@@ -817,7 +791,7 @@ class SettingsWindow:
         theme_section = self.create_setting_section(
             general_frame,
             title=self.tr("settings_theme_title", "Appearance"),
-            icon=None,
+            icon="🎨",
             description=self.tr(
                 "settings_theme_description",
                 "Preview light or dark mode instantly before committing.",
@@ -934,7 +908,7 @@ class SettingsWindow:
         path_section = self.create_setting_section(
             download_frame,
             title=self.tr("settings_download_location_title", "Download Location"),
-            icon=None,
+            icon="📂",
             description=self.tr(
                 "settings_download_location_description",
                 "Decide where finished downloads are stored on your device.",
@@ -981,7 +955,7 @@ class SettingsWindow:
         quality_section = self.create_setting_section(
             download_frame,
             title=self.tr("settings_quality_title", "Video Quality"),
-            icon=None,
+            icon="📺",
             description=self.tr(
                 "settings_quality_description",
                 "Select your preferred quality. The best available option is used when possible.",
@@ -1045,7 +1019,7 @@ class SettingsWindow:
         audio_section = self.create_setting_section(
             download_frame,
             title=self.tr("settings_audio_title", "Audio Conversion"),
-            icon=None,
+            icon="🎧",
             description=self.tr(
                 "settings_audio_description",
                 "Automatically convert videos to MP3 after download.",
@@ -1072,7 +1046,7 @@ class SettingsWindow:
         profile_section = self.create_setting_section(
             download_frame,
             title=self.tr("settings_profile_limit_title", "Profile Download Limit"),
-            icon=None,
+            icon="📊",
             description=self.tr(
                 "settings_profile_limit_description",
                 "Control how many videos are downloaded when grabbing an entire profile.",
@@ -1122,7 +1096,7 @@ class SettingsWindow:
         options_section = self.create_setting_section(
             advanced_frame,
             title=self.tr("settings_options_title", "Download Options"),
-            icon=None,
+            icon="🧩",
             description=self.tr(
                 "settings_options_description",
                 "Fine-tune how downloads are organised and logged.",
@@ -1180,7 +1154,7 @@ class SettingsWindow:
         auto_section = self.create_setting_section(
             updates_frame,
             title=self.tr("settings_auto_updates_title", "Automatic Updates"),
-            icon=None,
+            icon="⬇",
             description=self.tr(
                 "settings_auto_updates_description",
                 "Keep yt-dlp up to date automatically each time the app starts.",
@@ -1207,7 +1181,7 @@ class SettingsWindow:
         manual_section = self.create_setting_section(
             updates_frame,
             title=self.tr("settings_manual_update_title", "Manual Update"),
-            icon=None,
+            icon="🔄",
             description=self.tr(
                 "settings_manual_update_description",
                 "Update yt-dlp immediately when you need the latest fixes.",

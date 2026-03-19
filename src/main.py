@@ -20,6 +20,8 @@ from src.utils.logger import setup_logger
 
 def main():
     """Initialize and run the application"""
+    root = None
+    logger = None
     try:
         # Setup logger
         logger = setup_logger()
@@ -48,8 +50,23 @@ def main():
         
         # Run application
         root.mainloop()
-        
+
+    except KeyboardInterrupt:
+        if logger is not None:
+            logger.info("Application interrupted by user")
+        if root is not None:
+            try:
+                root.destroy()
+            except tk.TclError:
+                pass
+        sys.exit(130)
+
     except Exception as e:
+        if root is not None:
+            try:
+                root.destroy()
+            except tk.TclError:
+                pass
         messagebox.showerror("Error", f"Failed to start application:\n{str(e)}")
         sys.exit(1)
 

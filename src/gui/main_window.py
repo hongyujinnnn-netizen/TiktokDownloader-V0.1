@@ -7,33 +7,30 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import sys
 import os
-import re
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 from config import APP_NAME, COLORS, FONTS, APP_VERSION
+from src.controllers.app_controller import AppController
 from src.gui.styles import apply_styles, create_styled_button, create_styled_entry, create_styled_frame
 from src.gui.profile_downloader import ProfileDownloaderWindow
 from src.gui.history_window import HistoryWindow
 from src.gui.settings_window import SettingsWindow
 from src.gui.progress_dialog import ProgressDialog, InlineStatus
-from src.core.downloader import TikTokDownloader
-from src.core.profile_scraper import ProfileScraper
-from src.utils.config_manager import ConfigManager
-from src.utils.validators import is_valid_tiktok_url, is_valid_profile_url, is_valid_video_url
+from src.utils.validators import is_valid_tiktok_url
 from src.utils.translator import translate
 from src.utils.logger import get_logger
-import pyperclip
 import threading
 
 
 class MainWindow:
     """Main application window"""
     
-    def __init__(self, root):
+    def __init__(self, root, controller=None):
         self.root = root
-        self.config = ConfigManager()
-        self.downloader = TikTokDownloader()
-        self.profile_scraper = ProfileScraper()
+        self.controller = controller or AppController()
+        self.config = self.controller.config
+        self.downloader = self.controller.downloader
+        self.profile_scraper = self.controller.profile_scraper
         self.tr = translate
         self.logger = get_logger("MainWindow")
         
@@ -42,10 +39,6 @@ class MainWindow:
         self.should_stop = False
         self.is_downloading = False
         self.is_batch_downloading = False
-        self.pending_batch_tasks = []
-        self.pending_batch_ignored = []
-        self.pending_batch_duplicates = []
-        self._batch_user_requested = False
         
         # Configure window
         self.root.title(self.tr("app_title", APP_NAME))
@@ -346,91 +339,59 @@ class MainWindow:
             return
 
         try:
-            with open(file_path, "r", encoding="utf-8") as file_handle:
-                lines = [line.strip() for line in file_handle if line.strip()]
+            batch_result = self.controller.load_batch_file(file_path)
         except Exception as exc:
             self.download_status.show_error(
                 self.tr("batch_file_read_error", "Failed to read file: {error}").format(error=str(exc)[:80])
             )
             return
 
-        if not lines:
+        if not batch_result.tasks and not batch_result.ignored_links and not batch_result.duplicate_links:
             self.download_status.show_warning(
                 self.tr("batch_empty_file", "Selected file does not contain any links."),
             )
             return
 
-        tasks = []  # Batch items with url/type metadata
-        ignored_links = []
-        duplicate_links = []
-        seen = set()
-
-        for line in lines:
-            normalized = line.strip()
-            if not normalized:
-                continue
-
-            key = normalized.lower()
-            if key in seen:
-                duplicate_links.append(normalized)
-                continue
-            seen.add(key)
-
-            if is_valid_video_url(normalized):
-                tasks.append({"url": normalized, "type": "video"})
-            elif is_valid_profile_url(normalized):
-                tasks.append({"url": normalized, "type": "profile"})
-            elif is_valid_tiktok_url(normalized):
-                tasks.append({"url": normalized, "type": "video"})
-            else:
-                ignored_links.append(normalized)
-
-        if not tasks:
+        if not batch_result.tasks:
             self.download_status.show_error(
                 self.tr("batch_no_valid_links", "No valid TikTok links found in the selected file."),
             )
             return
 
-        self.pending_batch_tasks = tasks
-        self.pending_batch_ignored = ignored_links
-        self.pending_batch_duplicates = duplicate_links
-        self._batch_user_requested = False
-
-        video_count = sum(1 for task in tasks if task.get("type") == "video")
-        profile_count = sum(1 for task in tasks if task.get("type") == "profile")
+        self.controller.set_pending_batch(batch_result)
 
         summary = self.tr(
             "batch_ready_message",
             "Loaded {count} links. Press Download to begin.",
-        ).format(count=len(tasks))
+        ).format(count=len(batch_result.tasks))
 
         detail_parts = []
-        if video_count:
+        if batch_result.video_count:
             detail_parts.append(
-                self.tr("batch_ready_videos", "{count} videos").format(count=video_count)
+                self.tr("batch_ready_videos", "{count} videos").format(count=batch_result.video_count)
             )
-        if profile_count:
+        if batch_result.profile_count:
             detail_parts.append(
-                self.tr("batch_ready_profiles", "{count} profiles").format(count=profile_count)
+                self.tr("batch_ready_profiles", "{count} profiles").format(count=batch_result.profile_count)
             )
         if detail_parts:
             summary += " (" + ", ".join(detail_parts) + ")"
 
-        if duplicate_links:
+        if batch_result.duplicate_links:
             summary += " " + self.tr(
                 "batch_ready_duplicates",
                 "Skipped {count} duplicate entries.",
-            ).format(count=len(duplicate_links))
+            ).format(count=len(batch_result.duplicate_links))
 
-        if ignored_links:
+        if batch_result.ignored_links:
             summary += " " + self.tr(
                 "batch_ready_ignored",
                 "Ignored {count} entries that were not valid TikTok URLs.",
-            ).format(count=len(ignored_links))
+            ).format(count=len(batch_result.ignored_links))
 
         self.download_status.show_info(summary)
 
-        first_url = tasks[0]["url"] if tasks else ""
+        first_url = batch_result.tasks[0].url if batch_result.tasks else ""
         self.url_entry.delete(0, tk.END)
         if first_url:
             self.url_entry.insert(0, first_url)
@@ -488,7 +449,7 @@ class MainWindow:
         """Perform sequential downloads for imported links."""
         convert_to_mp3 = self.config.get_setting("convert_to_mp3", False)
         create_folders = self.config.get_setting("create_profile_folders", True)
-        profile_limit = self._safe_int(self.config.get_setting("profile_video_limit", 10))
+        profile_limit = self.controller.safe_int(self.config.get_setting("profile_video_limit", 10))
 
         success_count = 0
         failures = []
@@ -499,8 +460,8 @@ class MainWindow:
 
         try:
             for index, task in enumerate(tasks, start=1):
-                url = task.get("url")
-                kind = task.get("type", "video")
+                url = task.url
+                kind = task.task_type
                 prefix = self.tr(
                     "batch_progress_prefix",
                     "[{index}/{total}]",
@@ -673,31 +634,25 @@ class MainWindow:
         self.url_entry.config(state="normal")
         self.url_entry.delete(0, tk.END)
         self.url_validation_label.config(text="")
-        self._batch_user_requested = False
+        self.controller.clear_pending_batch()
 
     def _start_batch_download(self):
         """Initialize batch download after user confirmation."""
-        if not self.pending_batch_tasks or not self._batch_user_requested:
+        if not self.controller.has_pending_batch() or not self.controller.batch_user_requested:
             return
 
-        tasks = list(self.pending_batch_tasks)
-        ignored = list(self.pending_batch_ignored)
-        duplicates = list(self.pending_batch_duplicates)
-        self.pending_batch_tasks = []
-        self.pending_batch_ignored = []
-        self.pending_batch_duplicates = []
-        self._batch_user_requested = False
-
-        limit = self._safe_int(self.config.get_setting("profile_video_limit", 0))
+        limit = self.controller.safe_int(self.config.get_setting("profile_video_limit", 0))
+        prepared_batch = self.controller.prepare_pending_batch(limit)
+        tasks = list(prepared_batch.tasks)
+        ignored = list(prepared_batch.ignored_links)
+        duplicates = list(prepared_batch.duplicate_links)
         limit_notice = ""
-        if limit > 0:
-            tasks, skipped_due_to_limit = self._apply_profile_limit(tasks, limit)
-            if skipped_due_to_limit:
-                ignored.extend(task["url"] for task in skipped_due_to_limit)
-                limit_notice = self.tr(
-                    "batch_limit_notice",
-                    "Respecting limit of {limit} per profile. Skipping {skipped} extra entries.",
-                ).format(limit=limit, skipped=len(skipped_due_to_limit))
+        if prepared_batch.skipped_due_to_limit:
+            ignored.extend(task.url for task in prepared_batch.skipped_due_to_limit)
+            limit_notice = self.tr(
+                "batch_limit_notice",
+                "Respecting limit of {limit} per profile. Skipping {skipped} extra entries.",
+            ).format(limit=limit, skipped=len(prepared_batch.skipped_due_to_limit))
 
         if not tasks:
             ignored_count = len(ignored)
@@ -733,58 +688,24 @@ class MainWindow:
         )
         thread.start()
 
-    def _safe_int(self, value):
-        try:
-            return int(value)
-        except (TypeError, ValueError):
-            return 0
-
-    def _apply_profile_limit(self, tasks, limit):
-        counts = {}
-        kept = []
-        skipped = []
-        for task in tasks:
-            if task.get("type") != "video":
-                kept.append(task)
-                continue
-            profile = self._extract_profile_handle(task.get("url")) or "__unknown__"
-            current = counts.get(profile, 0)
-            if current >= limit:
-                skipped.append(task)
-                continue
-            counts[profile] = current + 1
-            kept.append(task)
-        return kept, skipped
-
-    def _extract_profile_handle(self, url):
-        if not url:
-            return None
-        match = re.search(r"@([A-Za-z0-9._-]+)", url)
-        if not match:
-            return None
-        return match.group(1).lower()
-
     def validate_url(self, event=None):
         """Validate URL in real-time and detect type"""
-        if event is not None and self.pending_batch_tasks:
-            self.pending_batch_tasks = []
-            self.pending_batch_ignored = []
-            self.pending_batch_duplicates = []
-            self._batch_user_requested = False
+        if event is not None and self.controller.has_pending_batch():
+            self.controller.clear_pending_batch()
             self.download_status.show_info(
                 self.tr("batch_cancelled_message", "Batch import cleared. Ready for single download."),
             )
 
-        url = self.url_entry.get().strip()
+        analysis = self.controller.analyze_url(self.url_entry.get())
         
-        if not url:
+        if not analysis.url:
             self.url_validation_label.config(text="")
             self.profile_options_frame.pack_forget()
             self.download_btn.config(text=self.tr("download_default", "\u2B07\uFE0F Download"))
             return
         
         # Check if it's a profile URL
-        if is_valid_profile_url(url):
+        if analysis.is_profile:
             self.url_validation_label.config(
                 text=self.tr("profile_url_detected", "\u2705 Profile URL detected - Bulk download mode"),
                 fg=COLORS["accent"]
@@ -792,9 +713,9 @@ class MainWindow:
             self.profile_options_frame.pack(pady=10)
             self.download_btn.config(text=self.tr("download_profile", "\u2B07\uFE0F Start Profile Download"))
             # Try to get profile info
-            threading.Thread(target=self.fetch_profile_info, args=(url,), daemon=True).start()
+            threading.Thread(target=self.fetch_profile_info, args=(analysis.url,), daemon=True).start()
         # Check if it's a video URL
-        elif is_valid_video_url(url):
+        elif analysis.is_video:
             self.url_validation_label.config(
                 text=self.tr("video_url_detected", "\u2705 Video URL detected - Single download mode"),
                 fg=COLORS["success"]
@@ -802,7 +723,7 @@ class MainWindow:
             self.profile_options_frame.pack_forget()
             self.download_btn.config(text=self.tr("download_video", "\u2B07\uFE0F Download Video"))
         # Valid TikTok URL but not sure which type
-        elif is_valid_tiktok_url(url):
+        elif analysis.is_valid:
             self.url_validation_label.config(
                 text=self.tr("valid_url_detected", "\u2705 Valid TikTok URL detected"),
                 fg=COLORS["success"]
@@ -825,23 +746,24 @@ class MainWindow:
             )
             return
 
-        if self.pending_batch_tasks:
-            self._batch_user_requested = True
+        if self.controller.has_pending_batch():
+            self.controller.mark_batch_requested()
             self._start_batch_download()
             return
 
-        url = self.url_entry.get().strip()
+        analysis = self.controller.analyze_url(self.url_entry.get())
+        url = analysis.url
         
         if not url:
             self.download_status.show_error(self.tr("empty_url_error", "Please enter a URL"))
             return
         
-        if not is_valid_tiktok_url(url):
+        if not analysis.is_valid:
             self.download_status.show_error(self.tr("invalid_url_error", "Invalid TikTok URL"))
             return
         
         # Detect URL type and download
-        if is_valid_profile_url(url):
+        if analysis.is_profile:
             self.download_profile()
         else:
             self.download_single_video()
